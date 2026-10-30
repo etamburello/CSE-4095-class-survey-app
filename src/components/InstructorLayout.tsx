@@ -1,6 +1,7 @@
-import type { ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, type ReactNode } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { primaryButton, secondaryButton } from '../lib/styles.ts'
+import { useAuth } from '../lib/useAuth.ts'
 
 export function InstructorLayout({
   title,
@@ -9,6 +10,17 @@ export function InstructorLayout({
   title: string
   children: ReactNode
 }) {
+  const { user, signOut } = useAuth()
+  const navigate = useNavigate()
+  const [signingOut, setSigningOut] = useState(false)
+  const instructor = user?.email ?? 'Instructor'
+
+  async function onLogout() {
+    setSigningOut(true)
+    await signOut()
+    navigate('/login', { replace: true })
+  }
+
   return (
     <div className="min-h-svh bg-stone-50 text-stone-900">
       <a
@@ -28,17 +40,28 @@ export function InstructorLayout({
             </Link>
             <h1 className="text-xl font-semibold text-stone-950">{title}</h1>
           </div>
-          <nav aria-label="Instructor" className="flex flex-wrap gap-2">
-            <Link to="/dashboard" className={secondaryButton}>
-              Dashboard
-            </Link>
-            <Link to="/surveys/new" className={primaryButton}>
-              New Survey
-            </Link>
-            <Link to="/" className={secondaryButton}>
-              Logout
-            </Link>
-          </nav>
+          <div className="flex flex-col items-stretch gap-2 sm:items-end">
+            <p className="text-sm text-stone-600">
+              Signed in as{' '}
+              <span className="font-medium text-stone-900">{instructor}</span>
+            </p>
+            <nav aria-label="Instructor" className="flex flex-wrap gap-2">
+              <Link to="/dashboard" className={secondaryButton}>
+                Dashboard
+              </Link>
+              <Link to="/surveys/new" className={primaryButton}>
+                New Survey
+              </Link>
+              <button
+                type="button"
+                className={secondaryButton}
+                onClick={() => void onLogout()}
+                disabled={signingOut}
+              >
+                {signingOut ? 'Logging out...' : 'Logout'}
+              </button>
+            </nav>
+          </div>
         </div>
       </header>
       <main id="main" className="mx-auto max-w-5xl px-4 py-6">
