@@ -111,7 +111,7 @@ Verified against the live Supabase project. A survey can be created, edited, and
 - [x] Add a Close Survey button.
 - [x] Add a Download QR Code button.
 
-Verified against the live Supabase project. Activating a survey closes the previous active survey, assigns a public link, and opens the presentation page with the title, QR code, readable URL, response count, and a downloadable QR image. Close Survey marks it closed. The student page and results still use sample data.
+Verified against the live Supabase project. Activating a survey closes the previous active survey, assigns a public link, and opens the presentation page with the title, QR code, readable URL, response count, and a downloadable QR image. Close Survey marks it closed. Results still use sample data.
 
 ---
 
@@ -129,6 +129,8 @@ Verified against the live Supabase project. Activating a survey closes the previ
 - [x] Store response and answers in Supabase.
 - [x] Show a submission confirmation page.
 - [x] Make the entire experience mobile friendly.
+
+Verified against the live Supabase project. `/s/:slug` loads the active survey without login, requires an answer for every question, and stores the response and answers. A successful submit shows the thank-you page. A missing link shows “Survey not found.” If the survey closes after the page has loaded, submit shows that it is no longer accepting responses. A fresh visit to a closed survey also shows “Survey not found,” because students can only read the active survey. Remembering a browser so it cannot submit twice is Phase 8. Results still use sample data.
 
 ---
 

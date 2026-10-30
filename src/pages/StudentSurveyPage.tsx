@@ -1,44 +1,85 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { useParams } from 'react-router-dom'
 import { FieldError } from '../components/FieldError.tsx'
+import {
+  loadStudentSurvey,
+  submitStudentResponse,
+  type StudentSurvey,
+} from '../lib/student-api.ts'
 import { primaryButton } from '../lib/styles.ts'
 import type { Question, SelectedAnswer } from '../lib/types.ts'
 import { usePageTitle } from '../lib/usePageTitle.ts'
-import { useSurveys } from '../lib/useSurveys.ts'
 
-type Phase = 'form' | 'submitting' | 'success'
+type Phase = 'form' | 'submitting' | 'success' | 'closed' | 'duplicate'
 
 export function StudentSurveyPage() {
   const { slug } = useParams()
-  const { getBySlug, hasSubmitted, submitResponse } = useSurveys()
-  const survey = slug ? getBySlug(slug) : undefined
+  const [survey, setSurvey] = useState<StudentSurvey | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [missing, setMissing] = useState(false)
+  const [loadError, setLoadError] = useState<string>()
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [formError, setFormError] = useState('')
   const [phase, setPhase] = useState<Phase>('form')
-  const timer = useRef<number | null>(null)
   usePageTitle(survey?.title ?? 'Survey')
 
   useEffect(() => {
+    if (!slug) return
+    let cancelled = false
+    void loadStudentSurvey(slug).then((result) => {
+      if (cancelled) return
+      if ('missing' in result) {
+        setSurvey(null)
+        setMissing(true)
+        setLoadError(undefined)
+      } else if ('error' in result) {
+        setSurvey(null)
+        setMissing(false)
+        setLoadError(result.error)
+      } else {
+        setSurvey(result.survey)
+        setMissing(false)
+        setLoadError(undefined)
+        if (result.survey.status !== 'active') setPhase('closed')
+      }
+      setLoading(false)
+    })
     return () => {
-      if (timer.current !== null) window.clearTimeout(timer.current)
+      cancelled = true
     }
-  }, [])
+  }, [slug])
 
-  if (!survey || !slug) {
+  if (!slug || missing) {
     return <StudentMessage title="Survey not found." />
   }
 
-  if (survey.status !== 'active') {
+  if (loading) {
+    return (
+      <main className="mx-auto flex min-h-svh max-w-xl flex-col justify-center px-5 py-10">
+        <p role="status" className="text-lg text-stone-700">
+          Loading survey...
+        </p>
+      </main>
+    )
+  }
+
+  if (loadError || !survey) {
+    return (
+      <StudentMessage
+        title="This survey is not available right now."
+        body={loadError}
+      />
+    )
+  }
+
+  if (phase === 'closed' || survey.status !== 'active') {
     return (
       <StudentMessage title="This survey is no longer accepting responses." />
     )
   }
 
-  if (
-    hasSubmitted(survey.id) &&
-    phase !== 'success' &&
-    phase !== 'submitting'
-  ) {
+  if (phase === 'duplicate') {
     return (
       <StudentMessage title="You have already submitted a response to this survey." />
     )
@@ -57,8 +98,9 @@ export function StudentSurveyPage() {
     (a, b) => a.position - b.position,
   )
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!survey || phase === 'submitting') return
     const nextErrors: Record<string, string> = {}
     const selected: SelectedAnswer[] = []
     for (const question of questions) {
@@ -67,12 +109,24 @@ export function StudentSurveyPage() {
       else selected.push({ question_id: question.id, choice_id: choiceId })
     }
     setErrors(nextErrors)
-    if (Object.keys(nextErrors).length > 0 || !survey) return
+    setFormError('')
+    if (Object.keys(nextErrors).length > 0) return
     setPhase('submitting')
-    timer.current = window.setTimeout(() => {
-      submitResponse(survey.id, selected)
+    const result = await submitStudentResponse(survey.id, selected)
+    if ('ok' in result) {
       setPhase('success')
-    }, 400)
+      return
+    }
+    if (result.code === 'closed') {
+      setPhase('closed')
+      return
+    }
+    if (result.code === 'duplicate') {
+      setPhase('duplicate')
+      return
+    }
+    setFormError(result.message)
+    setPhase('form')
   }
 
   return (
@@ -104,6 +158,11 @@ export function StudentSurveyPage() {
             }}
           />
         ))}
+        {formError && (
+          <p role="alert" className="mt-6 text-sm text-red-700">
+            {formError}
+          </p>
+        )}
         <button
           type="submit"
           className={`${primaryButton} mt-8 w-full text-base`}
