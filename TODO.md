@@ -71,7 +71,7 @@ This roadmap breaks the implementation into small, testable phases ordered from 
 - [x] Add search by survey title.
 - [x] Add filtering by status.
 
-Verified against the live Supabase project. The dashboard loads surveys and supports search, status filtering, activate, close, duplicate, archive, and delete. Results still use sample data. Duplicate from the dashboard stays on the dashboard; opening that copy in the editor is Phase 12.
+Verified against the live Supabase project. The dashboard loads surveys and supports search, status filtering, activate, close, duplicate, archive, and delete. Duplicate from the dashboard stays on the dashboard; opening that copy in the editor is Phase 12.
 
 ---
 
@@ -111,7 +111,7 @@ Verified against the live Supabase project. A survey can be created, edited, and
 - [x] Add a Close Survey button.
 - [x] Add a Download QR Code button.
 
-Verified against the live Supabase project. Activating a survey closes the previous active survey, assigns a public link, and opens the presentation page with the title, QR code, readable URL, response count, and a downloadable QR image. Close Survey marks it closed. Results still use sample data.
+Verified against the live Supabase project. Activating a survey closes the previous active survey, assigns a public link, and opens the presentation page with the title, QR code, readable URL, response count, and a downloadable QR image. Close Survey marks it closed.
 
 ---
 
@@ -130,7 +130,7 @@ Verified against the live Supabase project. Activating a survey closes the previ
 - [x] Show a submission confirmation page.
 - [x] Make the entire experience mobile friendly.
 
-Verified against the live Supabase project. `/s/:slug` loads the active survey without login, requires an answer for every question, and stores the response and answers. A successful submit shows the thank-you page. A missing link shows “Survey not found.” If the survey closes after the page has loaded, submit shows that it is no longer accepting responses. A fresh visit to a closed survey also shows “Survey not found,” because students can only read the active survey. Results still use sample data.
+Verified against the live Supabase project. `/s/:slug` loads the active survey without login, requires an answer for every question, and stores the response and answers. A successful submit shows the thank-you page. A missing link shows “Survey not found.” If the survey closes after the page has loaded, submit shows that it is no longer accepting responses. A fresh visit to a closed survey also shows “Survey not found,” because students can only read the active survey.
 
 ---
 
@@ -158,6 +158,8 @@ Verified against the live Supabase project. Each browser keeps one anonymous tok
 - [x] Clearly label unanswered questions.
 - [x] Add Refresh Results button.
 - [x] Add link back to the main dashboard.
+
+Verified against the live Supabase project. The results page loads the survey, questions, choices, responses, and answers for the signed-in instructor. It shows the response count, a bar for each choice with the count and a one-decimal percentage, a matching text list, and “Unanswered: N” when a submission has no choice for that question. Percentages use the number of submissions as the denominator. Refresh reloads from Supabase. Export CSV uses those same live responses. Back to Dashboard returns to the dashboard. An unknown survey shows “Survey not found.” A survey with no responses shows “No responses yet.” Students still cannot read answers. Date and title filters stay in Phase 10, and the CSV metadata preamble stays in Phase 11.
 
 ---
 

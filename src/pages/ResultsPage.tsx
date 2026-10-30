@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   Bar,
@@ -12,19 +12,58 @@ import {
 import { InstructorLayout } from '../components/InstructorLayout.tsx'
 import { csvFilename, downloadCsv, surveyToCsv } from '../lib/csv.ts'
 import { formatPercent, responseCountLabel } from '../lib/format.ts'
+import { loadSurveyResults } from '../lib/results-api.ts'
 import { primaryButton, secondaryButton } from '../lib/styles.ts'
-import type { Question, SurveyResponse } from '../lib/types.ts'
+import type { Question, Survey, SurveyResponse } from '../lib/types.ts'
 import { usePageTitle } from '../lib/usePageTitle.ts'
-import { useSurveys } from '../lib/useSurveys.ts'
 
 export function ResultsPage() {
   const { id } = useParams()
-  const { getSurvey, responses } = useSurveys()
-  const survey = id ? getSurvey(id) : undefined
-  const [loading, setLoading] = useState(false)
+  const [survey, setSurvey] = useState<Survey | null>(null)
+  const [responses, setResponses] = useState<SurveyResponse[]>([])
+  const [loading, setLoading] = useState(true)
+  const [missing, setMissing] = useState(false)
+  const [error, setError] = useState<string>()
   usePageTitle(survey ? `${survey.title} results` : 'Results')
 
-  if (!survey) {
+  useEffect(() => {
+    if (!id) return
+    let cancelled = false
+    void loadSurveyResults(id).then((result) => {
+      if (cancelled) return
+      applyResult(result)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [id])
+
+  function applyResult(result: Awaited<ReturnType<typeof loadSurveyResults>>) {
+    if ('missing' in result) {
+      setSurvey(null)
+      setResponses([])
+      setMissing(true)
+      setError(undefined)
+    } else if ('error' in result) {
+      setError(result.error)
+    } else {
+      setSurvey(result.survey)
+      setResponses(result.responses)
+      setMissing(false)
+      setError(undefined)
+    }
+    setLoading(false)
+  }
+
+  function refresh() {
+    if (!id || loading) return
+    setLoading(true)
+    void loadSurveyResults(id).then((result) => {
+      applyResult(result)
+    })
+  }
+
+  if (!id || missing) {
     return (
       <InstructorLayout title="Results">
         <h2 className="text-2xl font-semibold">Survey not found.</h2>
@@ -35,18 +74,34 @@ export function ResultsPage() {
     )
   }
 
+  if (loading && !survey) {
+    return (
+      <InstructorLayout title="Results">
+        <p className="text-lg text-stone-700" role="status">
+          Loading results...
+        </p>
+      </InstructorLayout>
+    )
+  }
+
+  if (!survey) {
+    return (
+      <InstructorLayout title="Results">
+        <p role="alert" className="text-sm text-red-700">
+          {error ?? 'The results could not be loaded.'}
+        </p>
+        <Link to="/dashboard" className={`${secondaryButton} mt-6`}>
+          Back to Dashboard
+        </Link>
+      </InstructorLayout>
+    )
+  }
+
   const selectedSurvey = survey
-  const surveyResponses = responses.filter(
-    (item) => item.survey_id === selectedSurvey.id,
-  )
+  const surveyResponses = responses
   const questions = [...selectedSurvey.questions].sort(
     (a, b) => a.position - b.position,
   )
-
-  function refresh() {
-    setLoading(true)
-    window.setTimeout(() => setLoading(false), 300)
-  }
 
   function exportCsv() {
     downloadCsv(
@@ -60,6 +115,11 @@ export function ResultsPage() {
       <p className="text-lg text-stone-700">
         {responseCountLabel(surveyResponses.length)}
       </p>
+      {error && (
+        <p role="alert" className="mt-3 text-sm text-red-700">
+          {error}
+        </p>
+      )}
       <div className="mt-4 flex flex-wrap gap-2">
         <button
           type="button"
@@ -146,7 +206,10 @@ function QuestionResult({
       }
     })
   const answered = responses.filter((response) =>
-    response.answers.some((answer) => answer.question_id === question.id),
+    response.answers.some(
+      (answer) =>
+        answer.question_id === question.id && answer.choice_id.length > 0,
+    ),
   ).length
   const unanswered = total - answered
   const summary = rows
