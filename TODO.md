@@ -159,7 +159,7 @@ Verified against the live Supabase project. Each browser keeps one anonymous tok
 - [x] Add Refresh Results button.
 - [x] Add link back to the main dashboard.
 
-Verified against the live Supabase project. The results page loads the survey, questions, choices, responses, and answers for the signed-in instructor. It shows the response count, a bar for each choice with the count and a one-decimal percentage, a matching text list, and “Unanswered: N” when a submission has no choice for that question. Percentages use the number of submissions as the denominator. Refresh reloads from Supabase. Export CSV uses those same live responses. Back to Dashboard returns to the dashboard. An unknown survey shows “Survey not found.” A survey with no responses shows “No responses yet.” Students still cannot read answers. Date and title filters stay in Phase 10, and the CSV metadata preamble stays in Phase 11.
+Verified against the live Supabase project. The results page loads the survey, questions, choices, responses, and answers for the signed-in instructor. It shows the response count, a bar for each choice with the count and a one-decimal percentage, a matching text list, and “Unanswered: N” when a submission has no choice for that question. Percentages use the number of submissions as the denominator. Refresh reloads from Supabase. Export CSV uses those same live responses. Back to Dashboard returns to the dashboard. An unknown survey shows “Survey not found.” A survey with no responses shows “No responses yet.” Students still cannot read answers. The CSV metadata preamble stays in Phase 11.
 
 ---
 
@@ -170,6 +170,8 @@ Verified against the live Supabase project. The results page loads the survey, q
 - [x] Add filtering by date.
 - [x] Add filtering by survey title.
 - [x] Preserve all historical response data.
+
+Verified against the live Supabase project. Closed and archived surveys open on the results page with their stored responses and a status badge. The dashboard filters surveys by title search, creation date range, and status, including Closed and Archived. The results page filters submissions by date and shows “N of M responses” while the charts use that filtered set. Closing or archiving a survey keeps its responses. Delete is still the only action that removes response data.
 
 ---
 

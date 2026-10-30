@@ -4,7 +4,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog.tsx'
 import { InstructorLayout } from '../components/InstructorLayout.tsx'
 import { StatusBadge } from '../components/StatusBadge.tsx'
 import type { DashboardSurvey } from '../lib/dashboard-api.ts'
-import { formatDate } from '../lib/format.ts'
+import { formatDate, matchesDateRange } from '../lib/format.ts'
 import {
   dangerQuietButton,
   fieldLabel,
@@ -36,16 +36,21 @@ export function DashboardPage() {
     duplicate,
   } = useDashboardSurveys()
   const [query, setQuery] = useState('')
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
   const [status, setStatus] = useState<StatusFilter>('all')
   const [pending, setPending] = useState<PendingAction | null>(null)
   const [activateErrorId, setActivateErrorId] = useState<string | null>(null)
   usePageTitle('Dashboard')
 
   const normalizedQuery = query.trim().toLowerCase()
+  const rangeInvalid = from !== '' && to !== '' && from > to
   const visible = surveys.filter((survey) => {
     const matchesStatus = status === 'all' || survey.status === status
     const matchesQuery = survey.title.toLowerCase().includes(normalizedQuery)
-    return matchesStatus && matchesQuery
+    const matchesDate =
+      !rangeInvalid && matchesDateRange(survey.created_at, from, to)
+    return matchesStatus && matchesQuery && matchesDate
   })
 
   function onActivate(survey: DashboardSurvey) {
@@ -81,6 +86,31 @@ export function DashboardPage() {
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            placeholder="Survey title"
+            className={textInput}
+          />
+        </div>
+        <div className="sm:w-44">
+          <label htmlFor="created-from" className={fieldLabel}>
+            From
+          </label>
+          <input
+            id="created-from"
+            type="date"
+            value={from}
+            onChange={(event) => setFrom(event.target.value)}
+            className={textInput}
+          />
+        </div>
+        <div className="sm:w-44">
+          <label htmlFor="created-to" className={fieldLabel}>
+            To
+          </label>
+          <input
+            id="created-to"
+            type="date"
+            value={to}
+            onChange={(event) => setTo(event.target.value)}
             className={textInput}
           />
         </div>
@@ -109,6 +139,12 @@ export function DashboardPage() {
         </p>
       )}
 
+      {rangeInvalid && (
+        <p role="alert" className="mt-4 text-sm text-red-700">
+          The start date is after the end date.
+        </p>
+      )}
+
       {loading ? (
         <p role="status" className="mt-10 text-lg text-stone-700">
           Loading surveys...
@@ -122,7 +158,7 @@ export function DashboardPage() {
             Create Your First Survey
           </Link>
         </section>
-      ) : visible.length === 0 ? (
+      ) : rangeInvalid ? null : visible.length === 0 ? (
         <p className="mt-10 text-lg text-stone-700">
           No surveys match your search.
         </p>
@@ -251,7 +287,7 @@ export function DashboardPage() {
       {pending?.type === 'archive' && (
         <ConfirmDialog
           title={`Archive "${pending.survey.title}"?`}
-          body="Archived surveys stay in the Archived filter. Students can no longer submit responses."
+          body="Archived surveys stay in the Archived filter. Students can no longer submit responses. Results stay available."
           confirmLabel="Archive"
           busy={acting}
           onConfirm={() => void onConfirm()}

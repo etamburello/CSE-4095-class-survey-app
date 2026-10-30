@@ -10,10 +10,20 @@ import {
   YAxis,
 } from 'recharts'
 import { InstructorLayout } from '../components/InstructorLayout.tsx'
+import { StatusBadge } from '../components/StatusBadge.tsx'
 import { csvFilename, downloadCsv, surveyToCsv } from '../lib/csv.ts'
-import { formatPercent, responseCountLabel } from '../lib/format.ts'
+import {
+  filteredResponseCountLabel,
+  formatPercent,
+  matchesDateRange,
+} from '../lib/format.ts'
 import { loadSurveyResults } from '../lib/results-api.ts'
-import { primaryButton, secondaryButton } from '../lib/styles.ts'
+import {
+  fieldLabel,
+  primaryButton,
+  secondaryButton,
+  textInput,
+} from '../lib/styles.ts'
 import type { Question, Survey, SurveyResponse } from '../lib/types.ts'
 import { usePageTitle } from '../lib/usePageTitle.ts'
 
@@ -24,6 +34,8 @@ export function ResultsPage() {
   const [loading, setLoading] = useState(true)
   const [missing, setMissing] = useState(false)
   const [error, setError] = useState<string>()
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
   usePageTitle(survey ? `${survey.title} results` : 'Results')
 
   useEffect(() => {
@@ -98,7 +110,13 @@ export function ResultsPage() {
   }
 
   const selectedSurvey = survey
-  const surveyResponses = responses
+  const rangeInvalid = from !== '' && to !== '' && from > to
+  const filtering = from !== '' || to !== ''
+  const surveyResponses = rangeInvalid
+    ? []
+    : responses.filter((response) =>
+        matchesDateRange(response.submitted_at, from, to),
+      )
   const questions = [...selectedSurvey.questions].sort(
     (a, b) => a.position - b.position,
   )
@@ -112,9 +130,48 @@ export function ResultsPage() {
 
   return (
     <InstructorLayout title={selectedSurvey.title}>
-      <p className="text-lg text-stone-700">
-        {responseCountLabel(surveyResponses.length)}
+      <p className="flex items-center gap-2 text-sm text-stone-700">
+        <span>Status:</span>
+        <StatusBadge status={selectedSurvey.status} />
       </p>
+      <p className="mt-2 text-lg text-stone-700">
+        {filteredResponseCountLabel(
+          surveyResponses.length,
+          responses.length,
+          filtering,
+        )}
+      </p>
+      <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-end">
+        <div className="sm:w-44">
+          <label htmlFor="submitted-from" className={fieldLabel}>
+            From
+          </label>
+          <input
+            id="submitted-from"
+            type="date"
+            value={from}
+            onChange={(event) => setFrom(event.target.value)}
+            className={textInput}
+          />
+        </div>
+        <div className="sm:w-44">
+          <label htmlFor="submitted-to" className={fieldLabel}>
+            To
+          </label>
+          <input
+            id="submitted-to"
+            type="date"
+            value={to}
+            onChange={(event) => setTo(event.target.value)}
+            className={textInput}
+          />
+        </div>
+      </div>
+      {rangeInvalid && (
+        <p role="alert" className="mt-3 text-sm text-red-700">
+          The start date is after the end date.
+        </p>
+      )}
       {error && (
         <p role="alert" className="mt-3 text-sm text-red-700">
           {error}
@@ -149,7 +206,7 @@ export function ResultsPage() {
         <p className="mt-10 text-lg text-stone-700" role="status">
           Loading results...
         </p>
-      ) : surveyResponses.length === 0 ? (
+      ) : rangeInvalid ? null : responses.length === 0 ? (
         <section className="mt-10 rounded-lg border border-dashed border-stone-300 bg-white px-6 py-12 text-center">
           <p className="text-lg font-medium text-stone-900">
             No responses yet.
@@ -166,6 +223,10 @@ export function ResultsPage() {
             </Link>
           )}
         </section>
+      ) : surveyResponses.length === 0 ? (
+        <p className="mt-10 text-lg text-stone-700">
+          No responses in this date range.
+        </p>
       ) : (
         <div className="mt-8 space-y-6">
           {questions.map((question) => (
