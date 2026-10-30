@@ -62,7 +62,10 @@ export function useDashboardSurveys() {
       return run(() => deleteDashboardSurvey(id))
     },
     duplicate(id: string) {
-      return run(() => duplicateDashboardSurvey(id))
+      return run(async () => {
+        const result = await duplicateDashboardSurvey(id)
+        return 'error' in result ? result.error : null
+      })
     },
   }
 }

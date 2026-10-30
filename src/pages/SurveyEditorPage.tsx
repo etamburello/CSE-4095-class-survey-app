@@ -1,9 +1,18 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { ConfirmDialog } from '../components/ConfirmDialog.tsx'
 import { FieldError } from '../components/FieldError.tsx'
 import { InstructorLayout } from '../components/InstructorLayout.tsx'
 import { StatusBadge } from '../components/StatusBadge.tsx'
+import {
+  closeDashboardSurvey,
+  duplicateDashboardSurvey,
+} from '../lib/dashboard-api.ts'
+import {
+  activateEditorSurvey,
+  loadEditorSurvey,
+  saveEditorSurvey,
+} from '../lib/editor-api.ts'
 import {
   createChoice,
   createQuestion,
@@ -20,19 +29,55 @@ import {
 } from '../lib/styles.ts'
 import type { Question, QuestionType, Survey } from '../lib/types.ts'
 import { usePageTitle } from '../lib/usePageTitle.ts'
-import { useSurveys } from '../lib/useSurveys.ts'
 
 export function SurveyEditorPage() {
   const { id } = useParams()
-  const { getSurvey, closeSurvey, duplicateSurvey } = useSurveys()
-  const navigate = useNavigate()
-  const survey = id ? getSurvey(id) : undefined
-  const [confirmClose, setConfirmClose] = useState(false)
+  usePageTitle(id ? 'Edit Survey' : 'New Survey')
+  if (!id) return <NewSurveyEditor />
+  return <ExistingSurveyEditor id={id} />
+}
 
-  const title = !id ? 'New Survey' : survey ? 'Edit Survey' : 'Survey not found'
-  usePageTitle(title)
+function ExistingSurveyEditor({ id }: { id: string }) {
+  const [survey, setSurvey] = useState<Survey | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [missing, setMissing] = useState(false)
+  const [error, setError] = useState<string>()
 
-  if (id && !survey) {
+  useEffect(() => {
+    let cancelled = false
+    void loadEditorSurvey(id).then((result) => {
+      if (cancelled) return
+      if ('missing' in result) {
+        setSurvey(null)
+        setMissing(true)
+        setError(undefined)
+      } else if ('error' in result) {
+        setSurvey(null)
+        setMissing(false)
+        setError(result.error)
+      } else {
+        setSurvey(result.survey)
+        setMissing(false)
+        setError(undefined)
+      }
+      setLoading(false)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [id])
+
+  if (loading) {
+    return (
+      <InstructorLayout title="Edit Survey">
+        <p role="status" className="text-lg text-stone-700">
+          Loading survey...
+        </p>
+      </InstructorLayout>
+    )
+  }
+
+  if (missing) {
     return (
       <InstructorLayout title="Edit Survey">
         <h2 className="text-2xl font-semibold">Survey not found.</h2>
@@ -43,86 +88,152 @@ export function SurveyEditorPage() {
     )
   }
 
-  if (survey?.status === 'active') {
+  if (error || !survey) {
     return (
       <InstructorLayout title="Edit Survey">
-        <p className="flex items-center gap-2 text-sm text-stone-700">
-          Status: <StatusBadge status={survey.status} />
+        <p role="alert" className="text-sm text-red-700">
+          {error ?? 'The survey could not be loaded.'}
         </p>
-        <h2 className="mt-4 text-2xl font-semibold text-stone-950">
-          {survey.title}
-        </h2>
-        <p className="mt-3 max-w-xl text-base text-stone-700">
-          This survey is active. Close it before editing.
-        </p>
-        <div className="mt-6 flex flex-wrap gap-2">
-          <button
-            type="button"
-            className={primaryButton}
-            onClick={() => setConfirmClose(true)}
-          >
-            Close Survey
-          </button>
-          <Link
-            to={`/surveys/${survey.id}/present`}
-            className={secondaryButton}
-          >
-            Present
-          </Link>
-          <Link to="/dashboard" className={secondaryButton}>
-            Back to Dashboard
-          </Link>
-        </div>
-        {confirmClose && (
-          <ConfirmDialog
-            title={`Close "${survey.title}"?`}
-            body="Students will no longer be able to submit responses. You can edit the survey after it is closed."
-            confirmLabel="Close"
-            onConfirm={() => {
-              closeSurvey(survey.id)
-              setConfirmClose(false)
-            }}
-            onCancel={() => setConfirmClose(false)}
-          />
-        )}
+        <Link to="/dashboard" className={`${secondaryButton} mt-6`}>
+          Back to Dashboard
+        </Link>
       </InstructorLayout>
     )
   }
 
-  if (survey?.status === 'archived') {
+  if (survey.status === 'active') {
     return (
-      <InstructorLayout title="Edit Survey">
-        <h2 className="text-2xl font-semibold text-stone-950">
-          {survey.title}
-        </h2>
-        <p className="mt-3 max-w-xl text-base text-stone-700">
-          Archived surveys cannot be edited. Duplicate this survey to make a new
-          draft.
-        </p>
-        <div className="mt-6 flex flex-wrap gap-2">
-          <button
-            type="button"
-            className={primaryButton}
-            onClick={() => {
-              const copyId = duplicateSurvey(survey.id)
-              if (copyId) navigate(`/surveys/${copyId}/edit`)
-            }}
-          >
-            Duplicate
-          </button>
-          <Link
-            to={`/surveys/${survey.id}/results`}
-            className={secondaryButton}
-          >
-            Results
-          </Link>
-        </div>
-      </InstructorLayout>
+      <ActiveSurveyGate
+        survey={survey}
+        onClosed={() => setSurvey({ ...survey, status: 'closed' })}
+      />
     )
   }
 
-  if (!survey) return <NewSurveyEditor />
-  return <EditorForm key={survey.id} initial={survey} />
+  if (survey.status === 'archived')
+    return <ArchivedSurveyGate survey={survey} />
+
+  return (
+    <EditorForm
+      key={survey.id}
+      initial={survey}
+      onActivated={(next) => setSurvey(next)}
+    />
+  )
+}
+
+function ActiveSurveyGate({
+  survey,
+  onClosed,
+}: {
+  survey: Survey
+  onClosed: () => void
+}) {
+  const [confirmClose, setConfirmClose] = useState(false)
+  const [closing, setClosing] = useState(false)
+  const [error, setError] = useState<string>()
+
+  async function onConfirm() {
+    setClosing(true)
+    const message = await closeDashboardSurvey(survey.id)
+    if (message) {
+      setError(message)
+      setClosing(false)
+      return
+    }
+    onClosed()
+  }
+
+  return (
+    <InstructorLayout title="Edit Survey">
+      <p className="flex items-center gap-2 text-sm text-stone-700">
+        Status: <StatusBadge status={survey.status} />
+      </p>
+      <h2 className="mt-4 text-2xl font-semibold text-stone-950">
+        {survey.title}
+      </h2>
+      <p className="mt-3 max-w-xl text-base text-stone-700">
+        This survey is active. Close it before editing.
+      </p>
+      {error && (
+        <p role="alert" className="mt-3 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+      <div className="mt-6 flex flex-wrap gap-2">
+        <button
+          type="button"
+          className={primaryButton}
+          onClick={() => setConfirmClose(true)}
+        >
+          Close Survey
+        </button>
+        <Link to={`/surveys/${survey.id}/present`} className={secondaryButton}>
+          Present
+        </Link>
+        <Link to="/dashboard" className={secondaryButton}>
+          Back to Dashboard
+        </Link>
+      </div>
+      {confirmClose && (
+        <ConfirmDialog
+          title={`Close "${survey.title}"?`}
+          body="Students will no longer be able to submit responses. You can edit the survey after it is closed."
+          confirmLabel="Close"
+          busy={closing}
+          onConfirm={() => void onConfirm()}
+          onCancel={() => {
+            if (!closing) setConfirmClose(false)
+          }}
+        />
+      )}
+    </InstructorLayout>
+  )
+}
+
+function ArchivedSurveyGate({ survey }: { survey: Survey }) {
+  const navigate = useNavigate()
+  const [duplicating, setDuplicating] = useState(false)
+  const [error, setError] = useState<string>()
+
+  async function onDuplicate() {
+    setDuplicating(true)
+    const result = await duplicateDashboardSurvey(survey.id)
+    if ('error' in result) {
+      setError(result.error)
+      setDuplicating(false)
+      return
+    }
+    navigate(`/surveys/${result.id}/edit`)
+  }
+
+  return (
+    <InstructorLayout title="Edit Survey">
+      <h2 className="text-2xl font-semibold text-stone-950">{survey.title}</h2>
+      <p className="mt-3 max-w-xl text-base text-stone-700">
+        Archived surveys cannot be edited. Duplicate this survey to make a new
+        draft.
+      </p>
+      {error && (
+        <p role="alert" className="mt-3 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+      <div className="mt-6 flex flex-wrap gap-2">
+        <button
+          type="button"
+          className={primaryButton}
+          onClick={() => void onDuplicate()}
+          disabled={duplicating}
+        >
+          {duplicating ? 'Duplicating...' : 'Duplicate'}
+        </button>
+        <Link to={`/surveys/${survey.id}/results`} className={secondaryButton}>
+          Results
+        </Link>
+      </div>
+    </InstructorLayout>
+  )
 }
 
 function NewSurveyEditor() {
@@ -133,19 +244,26 @@ function NewSurveyEditor() {
 function EditorForm({
   initial,
   redirectOnSave = false,
+  onActivated,
 }: {
   initial: Survey
   redirectOnSave?: boolean
+  onActivated?: (survey: Survey) => void
 }) {
   const navigate = useNavigate()
   const location = useLocation()
-  const { saveSurvey, activateSurvey } = useSurveys()
   const [draft, setDraft] = useState(() => structuredClone(initial))
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [notice, setNotice] = useState(() => {
     const state = location.state as { notice?: string } | null
     return state?.notice ?? ''
   })
+  const [formError, setFormError] = useState(() => {
+    const state = location.state as { error?: string } | null
+    return state?.error ?? ''
+  })
+  const [busy, setBusy] = useState<'save' | 'activate' | null>(null)
+  const busyRef = useRef(false)
   const [questionToDelete, setQuestionToDelete] = useState<Question | null>(
     null,
   )
@@ -157,36 +275,63 @@ function EditorForm({
 
   function changeDraft(next: Survey) {
     setNotice('')
+    setFormError('')
     setErrors({})
     setDraft(next)
   }
 
-  function onSave() {
+  async function persist(mode: 'save' | 'activate') {
+    if (busyRef.current) return
+    busyRef.current = true
     const normalized = normalizeSurvey(draft)
-    const nextErrors = validateSurvey(normalized, 'save')
+    const nextErrors = validateSurvey(normalized, mode)
     setErrors(nextErrors)
-    if (Object.keys(nextErrors).length > 0) return
-    setDraft(normalized)
-    saveSurvey(normalized)
-    if (redirectOnSave) {
-      navigate(`/surveys/${normalized.id}/edit`, {
-        replace: true,
-        state: { notice: 'Saved' },
-      })
+    setFormError('')
+    setNotice('')
+    if (Object.keys(nextErrors).length > 0) {
+      busyRef.current = false
       return
     }
-    setNotice('Saved')
-  }
-
-  function onActivate() {
-    const normalized = normalizeSurvey(draft)
-    const nextErrors = validateSurvey(normalized, 'activate')
-    setErrors(nextErrors)
-    if (Object.keys(nextErrors).length > 0) return
     setDraft(normalized)
-    saveSurvey(normalized)
-    activateSurvey(normalized.id)
-    navigate(`/surveys/${normalized.id}/present`)
+    setBusy(mode === 'save' ? 'save' : 'activate')
+    const saved = await saveEditorSurvey(normalized)
+    if ('error' in saved) {
+      setFormError(saved.error)
+      busyRef.current = false
+      setBusy(null)
+      return
+    }
+    if (mode === 'save') {
+      busyRef.current = false
+      setBusy(null)
+      if (redirectOnSave) {
+        navigate(`/surveys/${saved.survey.id}/edit`, {
+          replace: true,
+          state: { notice: 'Saved' },
+        })
+        return
+      }
+      setDraft(saved.survey)
+      setNotice('Saved')
+      return
+    }
+
+    const activated = await activateEditorSurvey(saved.survey)
+    busyRef.current = false
+    setBusy(null)
+    if ('error' in activated) {
+      setDraft(saved.survey)
+      setFormError(activated.error)
+      if (redirectOnSave) {
+        navigate(`/surveys/${saved.survey.id}/edit`, {
+          replace: true,
+          state: { error: activated.error },
+        })
+      }
+      return
+    }
+    if (onActivated) onActivated(activated.survey)
+    else navigate(`/surveys/${activated.survey.id}/edit`, { replace: true })
   }
 
   const pageTitle = redirectOnSave ? 'New Survey' : 'Edit Survey'
@@ -196,179 +341,216 @@ function EditorForm({
       <form
         onSubmit={(event) => {
           event.preventDefault()
-          onSave()
+          void persist('save')
         }}
       >
-        <div>
-          <label htmlFor="survey-title" className={fieldLabel}>
-            Survey Title
-          </label>
-          <input
-            id="survey-title"
-            value={draft.title}
-            onChange={(event) =>
-              changeDraft({ ...draft, title: event.target.value })
-            }
-            aria-invalid={errors.title ? true : undefined}
-            aria-describedby={errors.title ? 'survey-title-error' : undefined}
-            className={textInput}
-          />
-          <FieldError id="survey-title-error">{errors.title}</FieldError>
-        </div>
-
-        <div className="mt-4">
-          <label htmlFor="survey-description" className={fieldLabel}>
-            Description
-          </label>
-          <textarea
-            id="survey-description"
-            rows={3}
-            value={draft.description}
-            onChange={(event) =>
-              changeDraft({ ...draft, description: event.target.value })
-            }
-            className={textInput}
-          />
-        </div>
-
-        <div className="mt-6 space-y-4">
-          {draft.questions.map((question, index) => (
-            <QuestionCard
-              key={question.id}
-              question={question}
-              index={index}
-              total={draft.questions.length}
-              errors={errors}
-              onText={(text) =>
-                changeDraft({
-                  ...draft,
-                  questions: draft.questions.map((item) =>
-                    item.id === question.id
-                      ? { ...item, question_text: text }
-                      : item,
-                  ),
-                })
+        {formError && (
+          <p role="alert" className="mb-4 text-sm text-red-700">
+            {formError}
+          </p>
+        )}
+        {!redirectOnSave && (
+          <p className="mb-4 flex items-center gap-2 text-sm text-stone-700">
+            Status: <StatusBadge status={draft.status} />
+          </p>
+        )}
+        <fieldset
+          disabled={busy !== null}
+          className="min-w-0 border-0 p-0 disabled:opacity-70"
+        >
+          <div>
+            <label htmlFor="survey-title" className={fieldLabel}>
+              Survey Title
+            </label>
+            <input
+              id="survey-title"
+              value={draft.title}
+              onChange={(event) =>
+                changeDraft({ ...draft, title: event.target.value })
               }
-              onType={(type) =>
-                changeDraft({
-                  ...draft,
-                  questions: draft.questions.map((item) => {
-                    if (item.id !== question.id) return item
-                    if (type === 'true_false') {
+              aria-invalid={errors.title ? true : undefined}
+              aria-describedby={errors.title ? 'survey-title-error' : undefined}
+              className={textInput}
+            />
+            <FieldError id="survey-title-error">{errors.title}</FieldError>
+          </div>
+
+          <div className="mt-4">
+            <label htmlFor="survey-description" className={fieldLabel}>
+              Description
+            </label>
+            <textarea
+              id="survey-description"
+              rows={3}
+              value={draft.description}
+              onChange={(event) =>
+                changeDraft({ ...draft, description: event.target.value })
+              }
+              className={textInput}
+            />
+          </div>
+
+          <div className="mt-6 space-y-4">
+            {draft.questions.map((question, index) => (
+              <QuestionCard
+                key={question.id}
+                question={question}
+                index={index}
+                total={draft.questions.length}
+                errors={errors}
+                onText={(text) =>
+                  changeDraft({
+                    ...draft,
+                    questions: draft.questions.map((item) =>
+                      item.id === question.id
+                        ? { ...item, question_text: text }
+                        : item,
+                    ),
+                  })
+                }
+                onType={(type) =>
+                  changeDraft({
+                    ...draft,
+                    questions: draft.questions.map((item) => {
+                      if (item.id !== question.id) return item
+                      if (type === 'true_false') {
+                        return {
+                          ...item,
+                          question_type: type,
+                          choices: [
+                            createChoice('True'),
+                            createChoice('False'),
+                          ],
+                        }
+                      }
+                      const isFixedPair =
+                        item.choices.length === 2 &&
+                        item.choices[0]?.choice_text === 'True' &&
+                        item.choices[1]?.choice_text === 'False'
                       return {
                         ...item,
                         question_type: type,
-                        choices: [createChoice('True'), createChoice('False')],
+                        choices: isFixedPair
+                          ? [createChoice(), createChoice()]
+                          : item.choices,
                       }
-                    }
-                    const isFixedPair =
-                      item.choices.length === 2 &&
-                      item.choices[0]?.choice_text === 'True' &&
-                      item.choices[1]?.choice_text === 'False'
-                    return {
-                      ...item,
-                      question_type: type,
-                      choices: isFixedPair
-                        ? [createChoice(), createChoice()]
-                        : item.choices,
-                    }
-                  }),
-                })
-              }
-              onMove={(direction) =>
-                changeDraft({
-                  ...draft,
-                  questions: moveById(draft.questions, question.id, direction),
-                })
-              }
-              onDelete={() => setQuestionToDelete(question)}
-              onChoiceText={(choiceId, text) =>
-                changeDraft({
-                  ...draft,
-                  questions: draft.questions.map((item) =>
-                    item.id === question.id
-                      ? {
-                          ...item,
-                          choices: item.choices.map((choice) =>
-                            choice.id === choiceId
-                              ? { ...choice, choice_text: text }
-                              : choice,
-                          ),
-                        }
-                      : item,
-                  ),
-                })
-              }
-              onAddChoice={() =>
-                changeDraft({
-                  ...draft,
-                  questions: draft.questions.map((item) =>
-                    item.id === question.id
-                      ? { ...item, choices: [...item.choices, createChoice()] }
-                      : item,
-                  ),
-                })
-              }
-              onRemoveChoice={(choiceId) =>
-                changeDraft({
-                  ...draft,
-                  questions: draft.questions.map((item) =>
-                    item.id === question.id
-                      ? {
-                          ...item,
-                          choices: item.choices.filter(
-                            (choice) => choice.id !== choiceId,
-                          ),
-                        }
-                      : item,
-                  ),
-                })
-              }
-              onMoveChoice={(choiceId, direction) =>
-                changeDraft({
-                  ...draft,
-                  questions: draft.questions.map((item) =>
-                    item.id === question.id
-                      ? {
-                          ...item,
-                          choices: moveById(item.choices, choiceId, direction),
-                        }
-                      : item,
-                  ),
-                })
-              }
-            />
-          ))}
-        </div>
+                    }),
+                  })
+                }
+                onMove={(direction) =>
+                  changeDraft({
+                    ...draft,
+                    questions: moveById(
+                      draft.questions,
+                      question.id,
+                      direction,
+                    ),
+                  })
+                }
+                onDelete={() => setQuestionToDelete(question)}
+                onChoiceText={(choiceId, text) =>
+                  changeDraft({
+                    ...draft,
+                    questions: draft.questions.map((item) =>
+                      item.id === question.id
+                        ? {
+                            ...item,
+                            choices: item.choices.map((choice) =>
+                              choice.id === choiceId
+                                ? { ...choice, choice_text: text }
+                                : choice,
+                            ),
+                          }
+                        : item,
+                    ),
+                  })
+                }
+                onAddChoice={() =>
+                  changeDraft({
+                    ...draft,
+                    questions: draft.questions.map((item) =>
+                      item.id === question.id
+                        ? {
+                            ...item,
+                            choices: [...item.choices, createChoice()],
+                          }
+                        : item,
+                    ),
+                  })
+                }
+                onRemoveChoice={(choiceId) =>
+                  changeDraft({
+                    ...draft,
+                    questions: draft.questions.map((item) =>
+                      item.id === question.id
+                        ? {
+                            ...item,
+                            choices: item.choices.filter(
+                              (choice) => choice.id !== choiceId,
+                            ),
+                          }
+                        : item,
+                    ),
+                  })
+                }
+                onMoveChoice={(choiceId, direction) =>
+                  changeDraft({
+                    ...draft,
+                    questions: draft.questions.map((item) =>
+                      item.id === question.id
+                        ? {
+                            ...item,
+                            choices: moveById(
+                              item.choices,
+                              choiceId,
+                              direction,
+                            ),
+                          }
+                        : item,
+                    ),
+                  })
+                }
+              />
+            ))}
+          </div>
 
-        <FieldError>{errors.questions}</FieldError>
+          <FieldError>{errors.questions}</FieldError>
 
-        <button
-          type="button"
-          className={`${secondaryButton} mt-6`}
-          onClick={() =>
-            changeDraft({
-              ...draft,
-              questions: [...draft.questions, createQuestion()],
-            })
-          }
-        >
-          + Add Question
-        </button>
-
-        <div className="mt-8 flex flex-wrap items-center gap-3">
-          <button type="submit" className={secondaryButton}>
-            {draft.status === 'draft' ? 'Save Draft' : 'Save'}
+          <button
+            type="button"
+            className={`${secondaryButton} mt-6`}
+            onClick={() =>
+              changeDraft({
+                ...draft,
+                questions: [...draft.questions, createQuestion()],
+              })
+            }
+          >
+            + Add Question
           </button>
-          <button type="button" className={primaryButton} onClick={onActivate}>
-            Activate
-          </button>
-          {notice && (
-            <p role="status" className="text-sm font-medium text-stone-700">
-              {notice}
-            </p>
-          )}
-        </div>
+
+          <div className="mt-8 flex flex-wrap items-center gap-3">
+            <button type="submit" className={secondaryButton}>
+              {busy === 'save'
+                ? 'Saving...'
+                : draft.status === 'draft'
+                  ? 'Save Draft'
+                  : 'Save'}
+            </button>
+            <button
+              type="button"
+              className={primaryButton}
+              onClick={() => void persist('activate')}
+            >
+              {busy === 'activate' ? 'Activating...' : 'Activate'}
+            </button>
+            {notice && (
+              <p role="status" className="text-sm font-medium text-stone-700">
+                {notice}
+              </p>
+            )}
+          </div>
+        </fieldset>
       </form>
 
       {questionToDelete && (

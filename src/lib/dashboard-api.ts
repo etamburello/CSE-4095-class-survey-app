@@ -109,8 +109,10 @@ export async function deleteDashboardSurvey(id: string) {
   return error ? error.message : null
 }
 
-export async function duplicateDashboardSurvey(id: string) {
-  if (!supabase) return notConnected
+export async function duplicateDashboardSurvey(
+  id: string,
+): Promise<{ id: string } | { error: string }> {
+  if (!supabase) return { error: notConnected }
   const { data, error } = await supabase
     .from('surveys')
     .select(
@@ -118,7 +120,7 @@ export async function duplicateDashboardSurvey(id: string) {
     )
     .eq('id', id)
     .single()
-  if (error) return error.message
+  if (error) return { error: error.message }
 
   const source = data as SourceSurvey
   const { data: created, error: insertError } = await supabase
@@ -131,7 +133,9 @@ export async function duplicateDashboardSurvey(id: string) {
     .select('id')
     .single()
   if (insertError || !created) {
-    return insertError?.message ?? 'The survey could not be duplicated.'
+    return {
+      error: insertError?.message ?? 'The survey could not be duplicated.',
+    }
   }
 
   const surveyId = (created as { id: string }).id
@@ -151,7 +155,9 @@ export async function duplicateDashboardSurvey(id: string) {
       .single()
     if (questionError || !questionRow) {
       await supabase.from('surveys').delete().eq('id', surveyId)
-      return questionError?.message ?? 'The survey could not be duplicated.'
+      return {
+        error: questionError?.message ?? 'The survey could not be duplicated.',
+      }
     }
 
     const choices = [...(question.choices ?? [])].sort(
@@ -167,10 +173,10 @@ export async function duplicateDashboardSurvey(id: string) {
     )
     if (choiceError) {
       await supabase.from('surveys').delete().eq('id', surveyId)
-      return choiceError.message
+      return { error: choiceError.message }
     }
   }
-  return null
+  return { id: surveyId }
 }
 
 async function updateStatus(id: string, status: SurveyStatus) {
