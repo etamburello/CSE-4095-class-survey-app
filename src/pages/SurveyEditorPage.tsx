@@ -113,13 +113,7 @@ function ExistingSurveyEditor({ id }: { id: string }) {
   if (survey.status === 'archived')
     return <ArchivedSurveyGate survey={survey} />
 
-  return (
-    <EditorForm
-      key={survey.id}
-      initial={survey}
-      onActivated={(next) => setSurvey(next)}
-    />
-  )
+  return <EditorForm key={survey.id} initial={survey} />
 }
 
 function ActiveSurveyGate({
@@ -244,11 +238,9 @@ function NewSurveyEditor() {
 function EditorForm({
   initial,
   redirectOnSave = false,
-  onActivated,
 }: {
   initial: Survey
   redirectOnSave?: boolean
-  onActivated?: (survey: Survey) => void
 }) {
   const navigate = useNavigate()
   const location = useLocation()
@@ -330,8 +322,7 @@ function EditorForm({
       }
       return
     }
-    if (onActivated) onActivated(activated.survey)
-    else navigate(`/surveys/${activated.survey.id}/edit`, { replace: true })
+    navigate(`/surveys/${activated.survey.id}/present`, { replace: true })
   }
 
   const pageTitle = redirectOnSave ? 'New Survey' : 'Edit Survey'

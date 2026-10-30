@@ -3,18 +3,48 @@ import { Link, useParams } from 'react-router-dom'
 import { toDataURL } from 'qrcode'
 import { ConfirmDialog } from '../components/ConfirmDialog.tsx'
 import { StatusBadge } from '../components/StatusBadge.tsx'
+import { closeDashboardSurvey } from '../lib/dashboard-api.ts'
+import { loadPresentSurvey, type PresentSurvey } from '../lib/present-api.ts'
 import { primaryButton, secondaryButton } from '../lib/styles.ts'
 import { usePageTitle } from '../lib/usePageTitle.ts'
-import { useSurveys } from '../lib/useSurveys.ts'
 
 export function PresentPage() {
   const { id } = useParams()
-  const { getSurvey, responses, closeSurvey } = useSurveys()
-  const survey = id ? getSurvey(id) : undefined
+  const [survey, setSurvey] = useState<PresentSurvey | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [missing, setMissing] = useState(false)
+  const [error, setError] = useState<string>()
   const [qrUrl, setQrUrl] = useState<string | null>(null)
   const [qrError, setQrError] = useState(false)
   const [confirmClose, setConfirmClose] = useState(false)
+  const [closing, setClosing] = useState(false)
+
   usePageTitle(survey ? survey.title : 'Present survey')
+
+  useEffect(() => {
+    if (!id) return
+    let cancelled = false
+    void loadPresentSurvey(id).then((result) => {
+      if (cancelled) return
+      if ('missing' in result) {
+        setSurvey(null)
+        setMissing(true)
+        setError(undefined)
+      } else if ('error' in result) {
+        setSurvey(null)
+        setMissing(false)
+        setError(result.error)
+      } else {
+        setSurvey(result.survey)
+        setMissing(false)
+        setError(undefined)
+      }
+      setLoading(false)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [id])
 
   const publicUrl =
     survey?.public_slug && typeof window !== 'undefined'
@@ -23,9 +53,6 @@ export function PresentPage() {
   const displayUrl = survey?.public_slug
     ? `${window.location.host}/s/${survey.public_slug}`
     : null
-  const responseCount = survey
-    ? responses.filter((item) => item.survey_id === survey.id).length
-    : 0
 
   useEffect(() => {
     if (!publicUrl) return
@@ -46,7 +73,7 @@ export function PresentPage() {
     }
   }, [publicUrl])
 
-  if (!survey) {
+  if (!id) {
     return (
       <main className="mx-auto flex min-h-svh max-w-3xl flex-col justify-center px-6">
         <h1 className="text-3xl font-semibold">Survey not found.</h1>
@@ -55,6 +82,54 @@ export function PresentPage() {
         </Link>
       </main>
     )
+  }
+
+  if (loading) {
+    return (
+      <main className="mx-auto flex min-h-svh max-w-3xl flex-col justify-center px-6">
+        <p role="status" className="text-lg text-stone-700">
+          Loading survey...
+        </p>
+      </main>
+    )
+  }
+
+  if (missing) {
+    return (
+      <main className="mx-auto flex min-h-svh max-w-3xl flex-col justify-center px-6">
+        <h1 className="text-3xl font-semibold">Survey not found.</h1>
+        <Link to="/dashboard" className={`${secondaryButton} mt-6 self-start`}>
+          Back to Dashboard
+        </Link>
+      </main>
+    )
+  }
+
+  if (error || !survey) {
+    return (
+      <main className="mx-auto flex min-h-svh max-w-3xl flex-col justify-center px-6">
+        <p role="alert" className="text-sm text-red-700">
+          {error ?? 'The survey could not be loaded.'}
+        </p>
+        <Link to="/dashboard" className={`${secondaryButton} mt-6 self-start`}>
+          Back to Dashboard
+        </Link>
+      </main>
+    )
+  }
+
+  async function onClose() {
+    if (!survey) return
+    setClosing(true)
+    const message = await closeDashboardSurvey(survey.id)
+    if (message) {
+      setError(message)
+      setClosing(false)
+      return
+    }
+    setSurvey({ ...survey, status: 'closed' })
+    setConfirmClose(false)
+    setClosing(false)
   }
 
   return (
@@ -116,8 +191,13 @@ export function PresentPage() {
         )}
 
         <p className="mt-10 text-4xl font-semibold sm:text-5xl">
-          Responses: {responseCount}
+          Responses: {survey.responseCount}
         </p>
+        {error && (
+          <p role="alert" className="mt-4 text-sm text-red-700">
+            {error}
+          </p>
+        )}
 
         <div className="mt-10 flex flex-wrap justify-center gap-3">
           <Link
@@ -148,11 +228,11 @@ export function PresentPage() {
           title={`Close "${survey.title}"?`}
           body="Students will no longer be able to submit responses. Results stay available."
           confirmLabel="Close"
-          onConfirm={() => {
-            closeSurvey(survey.id)
-            setConfirmClose(false)
+          busy={closing}
+          onConfirm={() => void onClose()}
+          onCancel={() => {
+            if (!closing) setConfirmClose(false)
           }}
-          onCancel={() => setConfirmClose(false)}
         />
       )}
     </main>

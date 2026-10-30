@@ -71,7 +71,7 @@ This roadmap breaks the implementation into small, testable phases ordered from 
 - [x] Add search by survey title.
 - [x] Add filtering by status.
 
-Verified against the live Supabase project. The dashboard loads surveys and supports search, status filtering, activate, close, duplicate, archive, and delete. Results and Present still use sample data. Duplicate from the dashboard stays on the dashboard; opening that copy in the editor is Phase 12.
+Verified against the live Supabase project. The dashboard loads surveys and supports search, status filtering, activate, close, duplicate, archive, and delete. Results still use sample data. Duplicate from the dashboard stays on the dashboard; opening that copy in the editor is Phase 12.
 
 ---
 
@@ -93,7 +93,7 @@ Verified against the live Supabase project. The dashboard loads surveys and supp
 - [x] Load an existing survey for editing.
 - [x] Prevent editing an active survey unless it is first closed.
 
-Verified against the live Supabase project. A survey can be created, edited, and saved as a draft, then reloaded with its questions and choices. An active survey must be closed before editing. Archived surveys cannot be edited; duplicating one opens the new draft in the editor. Activate from the editor saves the survey and marks it active. The presentation page and QR code are Phase 6.
+Verified against the live Supabase project. A survey can be created, edited, and saved as a draft, then reloaded with its questions and choices. An active survey must be closed before editing. Archived surveys cannot be edited; duplicating one opens the new draft in the editor. Activate from the editor saves the survey, marks it active, and opens the presentation page.
 
 ---
 
@@ -110,6 +110,8 @@ Verified against the live Supabase project. A survey can be created, edited, and
 - [x] Display a readable fallback URL.
 - [x] Add a Close Survey button.
 - [x] Add a Download QR Code button.
+
+Verified against the live Supabase project. Activating a survey closes the previous active survey, assigns a public link, and opens the presentation page with the title, QR code, readable URL, response count, and a downloadable QR image. Close Survey marks it closed. The student page and results still use sample data.
 
 ---
 
