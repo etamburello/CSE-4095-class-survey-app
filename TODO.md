@@ -220,20 +220,22 @@ Verified against the live app. Skip to content is keyboard-focusable with a visi
 
 # Phase 14 — Testing
 
-- [ ] Test instructor login.
-- [ ] Test survey creation.
-- [ ] Test survey editing.
-- [ ] Test activation.
-- [ ] Test closing surveys.
-- [ ] Test QR-code links.
-- [ ] Test student submissions.
-- [ ] Test duplicate-submission prevention.
-- [ ] Test results calculations.
-- [ ] Test CSV export.
-- [ ] Test mobile layout.
-- [ ] Test with at least two browsers.
-- [ ] Test unauthorized access attempts.
-- [ ] Test database Row Level Security.
+- [x] Test instructor login.
+- [x] Test survey creation.
+- [x] Test survey editing.
+- [x] Test activation.
+- [x] Test closing surveys.
+- [x] Test QR-code links.
+- [x] Test student submissions.
+- [x] Test duplicate-submission prevention.
+- [x] Test results calculations.
+- [x] Test CSV export.
+- [x] Test mobile layout.
+- [x] Test with at least two browsers.
+- [x] Test unauthorized access attempts.
+- [x] Test database Row Level Security.
+
+Verified against the live Supabase project and local app. Instructor login reaches the dashboard. Creating, editing, activating, and closing surveys works in the UI. The present page shows a QR image and a `/s/:slug` link that opens the student form. A student submission shows thank-you, and a return visit shows the already-submitted message. Results show expected counts and one-decimal percentages (for example 66.7% / 33.3% on three responses). CSV includes metadata and response rows. At 390px width the dashboard does not overflow horizontally. Chromium and WebKit both load landing and login, send unauthenticated `/dashboard` users to login, and hide closed public surveys. Anonymous clients cannot read `responses` or `answers` (42501), cannot read closed surveys, and cannot submit after close; the signed-in instructor can read responses.
 
 ---
 
