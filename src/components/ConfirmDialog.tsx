@@ -6,6 +6,7 @@ type ConfirmDialogProps = {
   body: string
   confirmLabel: string
   tone?: 'danger' | 'default'
+  busy?: boolean
   onConfirm: () => void
   onCancel: () => void
 }
@@ -15,6 +16,7 @@ export function ConfirmDialog({
   body,
   confirmLabel,
   tone = 'default',
+  busy = false,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -33,7 +35,7 @@ export function ConfirmDialog({
   }, [])
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key === 'Escape') {
+    if (event.key === 'Escape' && !busy) {
       event.preventDefault()
       onCancel()
       return
@@ -81,6 +83,7 @@ export function ConfirmDialog({
             type="button"
             className={secondaryButton}
             onClick={onCancel}
+            disabled={busy}
           >
             Cancel
           </button>
@@ -88,6 +91,7 @@ export function ConfirmDialog({
             type="button"
             className={tone === 'danger' ? dangerButton : primaryButton}
             onClick={onConfirm}
+            disabled={busy}
           >
             {confirmLabel}
           </button>

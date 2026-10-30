@@ -71,6 +71,8 @@ This roadmap breaks the implementation into small, testable phases ordered from 
 - [x] Add search by survey title.
 - [x] Add filtering by status.
 
+Verified against the live Supabase project. The dashboard loads surveys and supports search, status filtering, activate, close, duplicate, archive, and delete. Edit, Results, Present, and New Survey still open the existing pages; saving survey content is Phase 5. Duplicate stays on the dashboard until the editor can load a saved survey.
+
 ---
 
 # Phase 5 — Survey Editor

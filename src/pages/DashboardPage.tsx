@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { ConfirmDialog } from '../components/ConfirmDialog.tsx'
 import { InstructorLayout } from '../components/InstructorLayout.tsx'
 import { StatusBadge } from '../components/StatusBadge.tsx'
+import type { DashboardSurvey } from '../lib/dashboard-api.ts'
 import { formatDate } from '../lib/format.ts'
 import {
   dangerQuietButton,
@@ -11,28 +12,29 @@ import {
   secondaryButton,
   textInput,
 } from '../lib/styles.ts'
-import type { Survey, SurveyStatus } from '../lib/types.ts'
+import type { SurveyStatus } from '../lib/types.ts'
+import { useDashboardSurveys } from '../lib/useDashboardSurveys.ts'
 import { usePageTitle } from '../lib/usePageTitle.ts'
-import { useSurveys } from '../lib/useSurveys.ts'
 
 type StatusFilter = 'all' | SurveyStatus
 
 type PendingAction = {
   type: 'delete' | 'archive' | 'close'
-  survey: Survey
+  survey: DashboardSurvey
 }
 
 export function DashboardPage() {
-  const navigate = useNavigate()
   const {
     surveys,
-    responses,
-    activateSurvey,
-    closeSurvey,
-    archiveSurvey,
-    deleteSurvey,
-    duplicateSurvey,
-  } = useSurveys()
+    loading,
+    error,
+    acting,
+    activate,
+    close,
+    archive,
+    remove,
+    duplicate,
+  } = useDashboardSurveys()
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState<StatusFilter>('all')
   const [pending, setPending] = useState<PendingAction | null>(null)
@@ -46,34 +48,26 @@ export function DashboardPage() {
     return matchesStatus && matchesQuery
   })
 
-  function responseCount(surveyId: string) {
-    return responses.filter((item) => item.survey_id === surveyId).length
-  }
-
-  function onActivate(survey: Survey) {
-    if (survey.questions.length === 0) {
+  function onActivate(survey: DashboardSurvey) {
+    if (survey.questionCount === 0) {
       setActivateErrorId(survey.id)
       return
     }
     setActivateErrorId(null)
-    activateSurvey(survey.id)
-    navigate(`/surveys/${survey.id}/present`)
+    void activate(survey)
   }
 
-  function onDuplicate(survey: Survey) {
-    const id = duplicateSurvey(survey.id)
-    if (id) navigate(`/surveys/${id}/edit`)
+  async function onConfirm() {
+    if (!pending || acting) return
+    const current = pending
+    const message =
+      current.type === 'delete'
+        ? await remove(current.survey.id)
+        : current.type === 'archive'
+          ? await archive(current.survey.id)
+          : await close(current.survey.id)
+    if (!message) setPending(null)
   }
-
-  function onConfirm() {
-    if (!pending) return
-    if (pending.type === 'delete') deleteSurvey(pending.survey.id)
-    if (pending.type === 'archive') archiveSurvey(pending.survey.id)
-    if (pending.type === 'close') closeSurvey(pending.survey.id)
-    setPending(null)
-  }
-
-  const pendingCount = pending ? responseCount(pending.survey.id) : 0
 
   return (
     <InstructorLayout title="Dashboard">
@@ -109,7 +103,17 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {surveys.length === 0 ? (
+      {error && (
+        <p role="alert" className="mt-4 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+
+      {loading ? (
+        <p role="status" className="mt-10 text-lg text-stone-700">
+          Loading surveys...
+        </p>
+      ) : surveys.length === 0 ? (
         <section className="mt-10 rounded-lg border border-dashed border-stone-300 bg-white px-6 py-12 text-center">
           <p className="text-lg text-stone-700">
             You have not created any surveys yet.
@@ -155,6 +159,7 @@ export function DashboardPage() {
                       type="button"
                       className={primaryButton}
                       onClick={() => onActivate(survey)}
+                      disabled={acting}
                     >
                       Activate
                     </button>
@@ -178,7 +183,8 @@ export function DashboardPage() {
                   <button
                     type="button"
                     className={secondaryButton}
-                    onClick={() => onDuplicate(survey)}
+                    onClick={() => void duplicate(survey.id)}
+                    disabled={acting}
                   >
                     Duplicate
                   </button>
@@ -188,6 +194,7 @@ export function DashboardPage() {
                       type="button"
                       className={secondaryButton}
                       onClick={() => setPending({ type: 'archive', survey })}
+                      disabled={acting}
                     >
                       Archive
                     </button>
@@ -197,6 +204,7 @@ export function DashboardPage() {
                       type="button"
                       className={secondaryButton}
                       onClick={() => setPending({ type: 'close', survey })}
+                      disabled={acting}
                     >
                       Close
                     </button>
@@ -206,6 +214,7 @@ export function DashboardPage() {
                       type="button"
                       className={dangerQuietButton}
                       onClick={() => setPending({ type: 'delete', survey })}
+                      disabled={acting}
                     >
                       Delete
                     </button>
@@ -226,14 +235,17 @@ export function DashboardPage() {
         <ConfirmDialog
           title={`Delete "${pending.survey.title}"?`}
           body={
-            pendingCount > 0
+            pending.survey.responseCount > 0
               ? 'This will permanently delete the survey and all of its responses.'
               : 'This will permanently delete the survey.'
           }
           confirmLabel="Delete"
           tone="danger"
-          onConfirm={onConfirm}
-          onCancel={() => setPending(null)}
+          busy={acting}
+          onConfirm={() => void onConfirm()}
+          onCancel={() => {
+            if (!acting) setPending(null)
+          }}
         />
       )}
       {pending?.type === 'archive' && (
@@ -241,8 +253,11 @@ export function DashboardPage() {
           title={`Archive "${pending.survey.title}"?`}
           body="Archived surveys stay in the Archived filter. Students can no longer submit responses."
           confirmLabel="Archive"
-          onConfirm={onConfirm}
-          onCancel={() => setPending(null)}
+          busy={acting}
+          onConfirm={() => void onConfirm()}
+          onCancel={() => {
+            if (!acting) setPending(null)
+          }}
         />
       )}
       {pending?.type === 'close' && (
@@ -250,8 +265,11 @@ export function DashboardPage() {
           title={`Close "${pending.survey.title}"?`}
           body="Students will no longer be able to submit responses. Results stay available."
           confirmLabel="Close"
-          onConfirm={onConfirm}
-          onCancel={() => setPending(null)}
+          busy={acting}
+          onConfirm={() => void onConfirm()}
+          onCancel={() => {
+            if (!acting) setPending(null)
+          }}
         />
       )}
     </InstructorLayout>
