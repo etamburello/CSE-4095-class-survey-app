@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { ConfirmDialog } from '../components/ConfirmDialog.tsx'
 import { InstructorLayout } from '../components/InstructorLayout.tsx'
 import { StatusBadge } from '../components/StatusBadge.tsx'
@@ -24,6 +24,7 @@ type PendingAction = {
 }
 
 export function DashboardPage() {
+  const navigate = useNavigate()
   const {
     surveys,
     loading,
@@ -42,6 +43,11 @@ export function DashboardPage() {
   const [pending, setPending] = useState<PendingAction | null>(null)
   const [activateErrorId, setActivateErrorId] = useState<string | null>(null)
   usePageTitle('Dashboard')
+
+  async function onDuplicate(id: string) {
+    const result = await duplicate(id)
+    if ('id' in result) navigate(`/surveys/${result.id}/edit`)
+  }
 
   const normalizedQuery = query.trim().toLowerCase()
   const rangeInvalid = from !== '' && to !== '' && from > to
@@ -219,7 +225,7 @@ export function DashboardPage() {
                   <button
                     type="button"
                     className={secondaryButton}
-                    onClick={() => void duplicate(survey.id)}
+                    onClick={() => void onDuplicate(survey.id)}
                     disabled={acting}
                   >
                     Duplicate

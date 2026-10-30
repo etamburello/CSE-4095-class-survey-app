@@ -71,7 +71,7 @@ This roadmap breaks the implementation into small, testable phases ordered from 
 - [x] Add search by survey title.
 - [x] Add filtering by status.
 
-Verified against the live Supabase project. The dashboard loads surveys and supports search, status filtering, activate, close, duplicate, archive, and delete. Duplicate from the dashboard stays on the dashboard; opening that copy in the editor is Phase 12.
+Verified against the live Supabase project. The dashboard loads surveys and supports search, status filtering, activate, close, duplicate, archive, and delete.
 
 ---
 
@@ -197,6 +197,8 @@ Verified against the live Supabase project. Export CSV downloads a UTF-8 file wi
 - [x] Create the copy in Draft state.
 - [x] Add "Copy of ..." naming.
 - [x] Redirect to the editor after duplication.
+
+Verified against the live Supabase project. Duplicate from the dashboard creates a new draft titled “Copy of …”, copies the description, questions, and choices, leaves responses behind, and opens the editor for that draft. Duplicating an archived survey from the editor gate follows the same path.
 
 ---
 

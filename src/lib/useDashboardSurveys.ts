@@ -61,11 +61,21 @@ export function useDashboardSurveys() {
     remove(id: string) {
       return run(() => deleteDashboardSurvey(id))
     },
-    duplicate(id: string) {
-      return run(async () => {
-        const result = await duplicateDashboardSurvey(id)
-        return 'error' in result ? result.error : null
-      })
+    async duplicate(id: string) {
+      setActing(true)
+      const result = await duplicateDashboardSurvey(id)
+      if ('error' in result) {
+        const listed = await listDashboardSurveys()
+        if ('error' in listed) setError(listed.error)
+        else {
+          setSurveys(listed.surveys)
+          setError(result.error)
+        }
+        setActing(false)
+        return result
+      }
+      setActing(false)
+      return result
     },
   }
 }
