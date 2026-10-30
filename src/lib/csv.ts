@@ -6,7 +6,21 @@ function escapeCell(value: string) {
   return safe
 }
 
-export function surveyToCsv(survey: Survey, responses: SurveyResponse[]) {
+function metadataLines(survey: Survey, exportedAt: string) {
+  return [
+    ['Survey Title', survey.title],
+    ['Description', survey.description],
+    ['Status', survey.status],
+    ['Created At', survey.created_at],
+    ['Exported At', exportedAt],
+  ].map((row) => row.map(escapeCell).join(','))
+}
+
+export function surveyToCsv(
+  survey: Survey,
+  responses: SurveyResponse[],
+  exportedAt = new Date().toISOString(),
+) {
   const questions = [...survey.questions].sort(
     (a, b) => a.position - b.position,
   )
@@ -15,7 +29,11 @@ export function surveyToCsv(survey: Survey, responses: SurveyResponse[]) {
     'submitted_at',
     ...questions.map((question) => question.question_text),
   ]
-  const lines = [header.map(escapeCell).join(',')]
+  const lines = [
+    ...metadataLines(survey, exportedAt),
+    '',
+    header.map(escapeCell).join(','),
+  ]
 
   const sorted = [...responses].sort((a, b) =>
     a.submitted_at.localeCompare(b.submitted_at),
@@ -49,7 +67,8 @@ export function csvFilename(title: string) {
 }
 
 export function downloadCsv(filename: string, csv: string) {
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+  // UTF-8 BOM helps Excel recognize the encoding.
+  const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url

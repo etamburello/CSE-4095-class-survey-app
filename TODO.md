@@ -159,7 +159,7 @@ Verified against the live Supabase project. Each browser keeps one anonymous tok
 - [x] Add Refresh Results button.
 - [x] Add link back to the main dashboard.
 
-Verified against the live Supabase project. The results page loads the survey, questions, choices, responses, and answers for the signed-in instructor. It shows the response count, a bar for each choice with the count and a one-decimal percentage, a matching text list, and “Unanswered: N” when a submission has no choice for that question. Percentages use the number of submissions as the denominator. Refresh reloads from Supabase. Export CSV uses those same live responses. Back to Dashboard returns to the dashboard. An unknown survey shows “Survey not found.” A survey with no responses shows “No responses yet.” Students still cannot read answers. The CSV metadata preamble stays in Phase 11.
+Verified against the live Supabase project. The results page loads the survey, questions, choices, responses, and answers for the signed-in instructor. It shows the response count, a bar for each choice with the count and a one-decimal percentage, a matching text list, and “Unanswered: N” when a submission has no choice for that question. Percentages use the number of submissions as the denominator. Refresh reloads from Supabase. Export CSV uses those same live responses. Back to Dashboard returns to the dashboard. An unknown survey shows “Survey not found.” A survey with no responses shows “No responses yet.” Students still cannot read answers.
 
 ---
 
@@ -178,12 +178,14 @@ Verified against the live Supabase project. Closed and archived surveys open on 
 # Phase 11 — CSV Export
 
 - [x] Add Export CSV button.
-- [ ] Export survey metadata.
+- [x] Export survey metadata.
 - [x] Export one row per response.
 - [x] Include submission timestamp.
 - [x] Include each question and answer.
 - [x] Create safe CSV escaping.
-- [ ] Test export with spreadsheet applications.
+- [x] Test export with spreadsheet applications.
+
+Verified against the live Supabase project. Export CSV downloads a UTF-8 file with a BOM for Excel. The file starts with survey metadata rows for title, description, status, created at, and exported at, then a blank line, then the response header and one row per submission with the timestamp and choice text for each question. Values that start with `=`, `+`, `-`, or `@` are prefixed so spreadsheet apps treat them as text. Quotes, commas, and newlines are escaped. The live Export CSV button produced that layout for a closed survey with two responses, and an Excel-dialect CSV parse recovered the metadata and answer cells correctly.
 
 ---
 
