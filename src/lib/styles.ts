@@ -15,4 +15,6 @@ export const dangerQuietButton = `${base} border border-red-300 bg-white text-re
 export const textInput =
   'w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900'
 
+export const textLink = `rounded-sm text-sm font-medium text-stone-600 hover:text-stone-900 ${focus}`
+
 export const fieldLabel = 'mb-1 block text-sm font-medium text-stone-800'

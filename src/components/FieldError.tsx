@@ -7,7 +7,7 @@ export function FieldError({
 }) {
   if (!children) return null
   return (
-    <p id={id} className="mt-1 text-sm text-red-700">
+    <p id={id} role="alert" className="mt-1 text-sm text-red-700">
       {children}
     </p>
   )

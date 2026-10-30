@@ -211,8 +211,10 @@ Verified against the live Supabase project. Duplicate from the dashboard creates
 - [x] Add error messages.
 - [x] Add confirmation dialogs for destructive actions.
 - [x] Improve QR-code presentation for classroom projection.
-- [ ] Test accessibility and keyboard navigation.
+- [x] Test accessibility and keyboard navigation.
 - [x] Improve color contrast.
+
+Verified against the live app. Skip to content is keyboard-focusable with a visible outline. Instructor and present text links share the same focus ring as buttons. Confirm dialogs move focus to Cancel, keep Tab inside the dialog, and close on Escape. Editor reorder and remove controls expose clear accessible names. Form errors use `role="alert"`, status badges include text labels, charts keep numeric values, and student radios show a visible focus ring. A student submission completed from the public form after selecting an answer.
 
 ---
 

@@ -607,6 +607,7 @@ function QuestionCard({
             className={secondaryButton}
             onClick={() => onMove(-1)}
             disabled={index === 0}
+            aria-label={`Move question ${index + 1} up`}
           >
             Up
           </button>
@@ -615,6 +616,7 @@ function QuestionCard({
             className={secondaryButton}
             onClick={() => onMove(1)}
             disabled={index === total - 1}
+            aria-label={`Move question ${index + 1} down`}
           >
             Down
           </button>
@@ -699,6 +701,7 @@ function QuestionCard({
                   className={secondaryButton}
                   onClick={() => onMoveChoice(choice.id, -1)}
                   disabled={choiceIndex === 0}
+                  aria-label={`Move choice ${choiceIndex + 1} up`}
                 >
                   Up
                 </button>
@@ -707,6 +710,7 @@ function QuestionCard({
                   className={secondaryButton}
                   onClick={() => onMoveChoice(choice.id, 1)}
                   disabled={choiceIndex === question.choices.length - 1}
+                  aria-label={`Move choice ${choiceIndex + 1} down`}
                 >
                   Down
                 </button>
@@ -715,6 +719,7 @@ function QuestionCard({
                     type="button"
                     className={secondaryButton}
                     onClick={() => onRemoveChoice(choice.id)}
+                    aria-label={`Remove choice ${choiceIndex + 1}`}
                   >
                     Remove
                   </button>

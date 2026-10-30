@@ -67,7 +67,8 @@ export function ConfirmDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={bodyId}
-        className="w-full max-w-md rounded-lg bg-white p-6 shadow-lg"
+        tabIndex={-1}
+        className="w-full max-w-md rounded-lg bg-white p-6 shadow-lg focus:outline-none"
         onMouseDown={(event) => event.stopPropagation()}
         onKeyDown={onKeyDown}
       >

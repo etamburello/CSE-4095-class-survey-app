@@ -218,7 +218,7 @@ function QuestionField({
                 value={choice.id}
                 checked={isSelected}
                 onChange={() => onSelect(choice.id)}
-                className="size-5 accent-slate-900"
+                className="size-5 accent-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
                 aria-describedby={error ? errorId : undefined}
               />
               <span>{choice.choice_text}</span>

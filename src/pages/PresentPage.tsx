@@ -5,7 +5,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog.tsx'
 import { StatusBadge } from '../components/StatusBadge.tsx'
 import { closeDashboardSurvey } from '../lib/dashboard-api.ts'
 import { loadPresentSurvey, type PresentSurvey } from '../lib/present-api.ts'
-import { primaryButton, secondaryButton } from '../lib/styles.ts'
+import { primaryButton, secondaryButton, textLink } from '../lib/styles.ts'
 import { usePageTitle } from '../lib/usePageTitle.ts'
 
 export function PresentPage() {
@@ -135,10 +135,7 @@ export function PresentPage() {
   return (
     <main className="flex min-h-svh flex-col bg-white px-6 py-8 text-stone-950">
       <div className="mx-auto flex w-full max-w-4xl items-center justify-between gap-4">
-        <Link
-          to="/dashboard"
-          className="text-sm font-medium text-stone-500 hover:text-stone-800"
-        >
+        <Link to="/dashboard" className={textLink}>
           Dashboard
         </Link>
         <p className="flex items-center gap-2 text-sm">
