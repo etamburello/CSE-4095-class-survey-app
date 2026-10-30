@@ -1,10 +1,11 @@
+import { getAnonymousToken, rememberSubmittedSurvey } from './student-token.ts'
+import { studentSupabase } from './supabase.ts'
 import type {
   Question,
   QuestionType,
   SelectedAnswer,
   SurveyStatus,
 } from './types.ts'
-import { studentSupabase } from './supabase.ts'
 
 const notConnected = 'This survey is not available right now.'
 
@@ -68,11 +69,18 @@ export async function submitStudentResponse(
   if (!studentSupabase) return { code: 'failed', message: notConnected }
   const { error } = await studentSupabase.rpc('submit_survey_response', {
     p_survey_id: surveyId,
-    p_anonymous_token: crypto.randomUUID(),
+    p_anonymous_token: getAnonymousToken(),
     p_answers: answers,
   })
-  if (!error) return { ok: true }
-  return submissionResult(error.message)
+  if (!error) {
+    rememberSubmittedSurvey(surveyId)
+    return { ok: true }
+  }
+  const result = submissionResult(error.message)
+  if ('code' in result && result.code === 'duplicate') {
+    rememberSubmittedSurvey(surveyId)
+  }
+  return result
 }
 
 function submissionResult(message: string): StudentSubmitResult {

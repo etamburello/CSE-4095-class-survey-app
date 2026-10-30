@@ -6,6 +6,7 @@ import {
   submitStudentResponse,
   type StudentSurvey,
 } from '../lib/student-api.ts'
+import { hasSubmittedSurvey } from '../lib/student-token.ts'
 import { primaryButton } from '../lib/styles.ts'
 import type { Question, SelectedAnswer } from '../lib/types.ts'
 import { usePageTitle } from '../lib/usePageTitle.ts'
@@ -41,7 +42,8 @@ export function StudentSurveyPage() {
         setSurvey(result.survey)
         setMissing(false)
         setLoadError(undefined)
-        if (result.survey.status !== 'active') setPhase('closed')
+        if (hasSubmittedSurvey(result.survey.id)) setPhase('duplicate')
+        else if (result.survey.status !== 'active') setPhase('closed')
       }
       setLoading(false)
     })

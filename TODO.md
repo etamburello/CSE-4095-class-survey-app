@@ -130,7 +130,7 @@ Verified against the live Supabase project. Activating a survey closes the previ
 - [x] Show a submission confirmation page.
 - [x] Make the entire experience mobile friendly.
 
-Verified against the live Supabase project. `/s/:slug` loads the active survey without login, requires an answer for every question, and stores the response and answers. A successful submit shows the thank-you page. A missing link shows “Survey not found.” If the survey closes after the page has loaded, submit shows that it is no longer accepting responses. A fresh visit to a closed survey also shows “Survey not found,” because students can only read the active survey. Remembering a browser so it cannot submit twice is Phase 8. Results still use sample data.
+Verified against the live Supabase project. `/s/:slug` loads the active survey without login, requires an answer for every question, and stores the response and answers. A successful submit shows the thank-you page. A missing link shows “Survey not found.” If the survey closes after the page has loaded, submit shows that it is no longer accepting responses. A fresh visit to a closed survey also shows “Survey not found,” because students can only read the active survey. Results still use sample data.
 
 ---
 
@@ -142,6 +142,8 @@ Verified against the live Supabase project. `/s/:slug` loads the active survey w
 - [x] Prevent the same token from submitting twice to the same survey.
 - [x] Show a friendly message if a duplicate submission is attempted.
 - [x] Add a database uniqueness constraint if appropriate.
+
+Verified against the live Supabase project. Each browser keeps one anonymous token in local storage, and that token is saved with the response. Returning to the same survey shows “You have already submitted a response to this survey.” A second submit with the same token is rejected and shows that message. The same browser can still submit a different survey. The uniqueness constraint `responses_unique_student_per_survey` was already in the schema.
 
 ---
 
