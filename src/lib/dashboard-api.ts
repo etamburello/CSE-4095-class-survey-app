@@ -32,11 +32,17 @@ type SourceQuestion = {
   question_text: string
   question_type: QuestionType
   position: number
+  min_value: number | null
+  max_value: number | null
+  rating_max: number | null
   choices: SourceChoice[] | null
 }
 type SourceSurvey = {
   title: string
   description: string | null
+  course_id: string | null
+  semester_id: string | null
+  lms_course_url: string | null
   questions: SourceQuestion[] | null
 }
 
@@ -116,19 +122,25 @@ export async function duplicateDashboardSurvey(
   const { data, error } = await supabase
     .from('surveys')
     .select(
-      'title, description, questions(question_text, question_type, position, choices(choice_text, position))',
+      'title, description, course_id, semester_id, lms_course_url, questions(question_text, question_type, position, min_value, max_value, rating_max, choices(choice_text, position))',
     )
     .eq('id', id)
     .single()
   if (error) return { error: error.message }
 
   const source = data as SourceSurvey
+  const { data: profile } = await supabase.rpc('ensure_instructor_profile')
+  const ownerId = (profile as { id?: string } | null)?.id ?? null
   const { data: created, error: insertError } = await supabase
     .from('surveys')
     .insert({
       title: `Copy of ${source.title}`,
       description: source.description,
       status: 'draft',
+      owner_id: ownerId,
+      course_id: source.course_id,
+      semester_id: source.semester_id,
+      lms_course_url: source.lms_course_url,
     })
     .select('id')
     .single()
@@ -139,6 +151,13 @@ export async function duplicateDashboardSurvey(
   }
 
   const surveyId = (created as { id: string }).id
+  if (ownerId) {
+    await supabase.from('survey_instructors').upsert({
+      survey_id: surveyId,
+      instructor_id: ownerId,
+      role: 'owner',
+    })
+  }
   const questions = [...(source.questions ?? [])].sort(
     (a, b) => a.position - b.position,
   )
@@ -150,6 +169,9 @@ export async function duplicateDashboardSurvey(
         question_text: question.question_text,
         question_type: question.question_type,
         position: question.position,
+        min_value: question.min_value,
+        max_value: question.max_value,
+        rating_max: question.rating_max,
       })
       .select('id')
       .single()

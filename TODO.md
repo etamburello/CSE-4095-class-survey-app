@@ -24,7 +24,7 @@ This roadmap breaks the implementation into small, testable phases ordered from 
 
 # Phase 2 — Supabase Project and Database
 
-- [ ] Create a Supabase project.
+- [x] Create a Supabase project.
 - [x] Create the `surveys` table.
 - [x] Create the `questions` table.
 - [x] Create the `choices` table.
@@ -35,10 +35,12 @@ This roadmap breaks the implementation into small, testable phases ordered from 
 - [x] Add timestamps.
 - [x] Add survey-status validation.
 - [x] Create Row Level Security policies.
-- [ ] Verify students cannot read survey results.
-- [ ] Verify anonymous students can read active surveys.
-- [ ] Verify anonymous students can submit responses.
-- [ ] Verify authenticated instructors have full access.
+- [x] Verify students cannot read survey results.
+- [x] Verify anonymous students can read active surveys.
+- [x] Verify anonymous students can submit responses.
+- [x] Verify authenticated instructors have full access.
+
+Verified against the live Supabase project. Anonymous clients receive 42501 for `responses` / `answers`, can select active surveys only (closed surveys return no rows), and submit through `submit_survey_response`. Authenticated instructors can read responses and manage surveys.
 
 ---
 
@@ -117,7 +119,7 @@ Verified against the live Supabase project. Activating a survey closes the previ
 
 # Phase 7 — Student Survey Page
 
-- [x] Create the public route `/s/:surveyId`.
+- [x] Create the public route `/s/:slug`.
 - [x] Load the requested active survey.
 - [x] Show an error if the survey does not exist.
 - [x] Show a message if the survey is closed.
@@ -272,6 +274,6 @@ Verified on Cloudflare Pages at `https://cse-4095-class-survey-app.pages.dev`, c
 - [x] Add course and semester organization.
 - [x] Add analytics across multiple surveys.
 
-Verified: Phase 16 migration applied (`instructors`, `courses`, `semesters`, `question_bank`, `survey_instructors`, expanded question types, Realtime on `responses`, updated `submit_survey_response`). App build/lint pass. Results subscribe live; editor supports new types, bank, JSON/Markdown import-export, AI generate panel, LMS share/participation CSV, co-instructors, course/semester assignment; pages for bank/courses/semesters/analytics. AI needs `OPENAI_API_KEY` + `generate-questions` Edge Function deploy (documented in README).
+Verified: Phase 16 migration applied (`instructors`, `courses`, `semesters`, `question_bank`, `survey_instructors`, expanded question types, Realtime on `responses`, updated `submit_survey_response`). Production serves Phase 16 UI. MVP create → activate → student submit → duplicate-block → instructor results verified live. New types (short answer, checkbox, rating, numeric) submit through the RPC. Duplicate copies Phase 16 question fields and course/semester/LMS metadata. AI generate works via local topic templates when the Edge Function is undeployed; OpenAI path is optional (README).
 
 ---

@@ -405,7 +405,11 @@ function EditorForm({
       ...draft,
       questions: [...draft.questions, ...result.questions],
     })
-    setNotice(`Added ${result.questions.length} AI-generated question(s).`)
+    setNotice(
+      result.source === 'openai'
+        ? `Added ${result.questions.length} AI-generated question(s).`
+        : `Added ${result.questions.length} generated question(s). Deploy the generate-questions Edge Function with OPENAI_API_KEY for OpenAI-backed generation.`,
+    )
   }
 
   async function onInvite() {

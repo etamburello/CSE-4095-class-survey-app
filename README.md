@@ -11,7 +11,7 @@ React + Vite + Supabase classroom pulse surveys for a single course instructor (
 ## Phase 16 extras
 
 - **Realtime results:** responses table is in the `supabase_realtime` publication.
-- **AI questions:** deploy `supabase/functions/generate-questions` and set the secret:
+- **AI questions:** the editor “Generate with AI” button always works. Without the Edge Function it uses a local topic-based generator. For OpenAI-backed generation, deploy `supabase/functions/generate-questions` and set the secret:
 
 ```bash
 supabase secrets set OPENAI_API_KEY=sk-...
