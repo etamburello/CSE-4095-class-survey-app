@@ -11,7 +11,13 @@ import {
 } from 'recharts'
 import { InstructorLayout } from '../components/InstructorLayout.tsx'
 import { StatusBadge } from '../components/StatusBadge.tsx'
-import { csvFilename, downloadCsv, surveyToCsv } from '../lib/csv.ts'
+import {
+  csvFilename,
+  downloadCsv,
+  lmsShareText,
+  participationToCsv,
+  surveyToCsv,
+} from '../lib/csv.ts'
 import {
   filteredResponseCountLabel,
   formatPercent,
@@ -24,6 +30,7 @@ import {
   secondaryButton,
   textInput,
 } from '../lib/styles.ts'
+import { supabase } from '../lib/supabase.ts'
 import type { Question, Survey, SurveyResponse } from '../lib/types.ts'
 import { usePageTitle } from '../lib/usePageTitle.ts'
 
@@ -36,19 +43,9 @@ export function ResultsPage() {
   const [error, setError] = useState<string>()
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
+  const [live, setLive] = useState(false)
+  const [copied, setCopied] = useState(false)
   usePageTitle(survey ? `${survey.title} results` : 'Results')
-
-  useEffect(() => {
-    if (!id) return
-    let cancelled = false
-    void loadSurveyResults(id).then((result) => {
-      if (cancelled) return
-      applyResult(result)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [id])
 
   function applyResult(result: Awaited<ReturnType<typeof loadSurveyResults>>) {
     if ('missing' in result) {
@@ -67,12 +64,46 @@ export function ResultsPage() {
     setLoading(false)
   }
 
+  useEffect(() => {
+    if (!id) return
+    let cancelled = false
+    void loadSurveyResults(id).then((result) => {
+      if (!cancelled) applyResult(result)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [id])
+
+  useEffect(() => {
+    if (!id || !supabase) return
+    const channel = supabase
+      .channel(`results-${id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'responses',
+          filter: `survey_id=eq.${id}`,
+        },
+        () => {
+          void loadSurveyResults(id).then(applyResult)
+        },
+      )
+      .subscribe((status) => {
+        setLive(status === 'SUBSCRIBED')
+      })
+    return () => {
+      void supabase?.removeChannel(channel)
+      setLive(false)
+    }
+  }, [id])
+
   function refresh() {
     if (!id || loading) return
     setLoading(true)
-    void loadSurveyResults(id).then((result) => {
-      applyResult(result)
-    })
+    void loadSurveyResults(id).then(applyResult)
   }
 
   if (!id || missing) {
@@ -128,11 +159,33 @@ export function ResultsPage() {
     )
   }
 
+  function exportParticipation() {
+    downloadCsv(
+      csvFilename(selectedSurvey.title, 'participation'),
+      participationToCsv(selectedSurvey, surveyResponses),
+    )
+  }
+
+  async function shareLms() {
+    try {
+      await navigator.clipboard.writeText(lmsShareText(selectedSurvey))
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 2000)
+    } catch {
+      setError('Could not copy LMS share text.')
+    }
+  }
+
   return (
     <InstructorLayout title={selectedSurvey.title}>
-      <p className="flex items-center gap-2 text-sm text-stone-700">
+      <p className="flex flex-wrap items-center gap-2 text-sm text-stone-700">
         <span>Status:</span>
         <StatusBadge status={selectedSurvey.status} />
+        {live && (
+          <span className="rounded-full border border-emerald-700 px-2 py-0.5 text-xs font-medium text-emerald-800">
+            Live
+          </span>
+        )}
       </p>
       <p className="mt-2 text-lg text-stone-700">
         {filteredResponseCountLabel(
@@ -189,6 +242,16 @@ export function ResultsPage() {
         <button type="button" className={secondaryButton} onClick={exportCsv}>
           Export CSV
         </button>
+        <button
+          type="button"
+          className={secondaryButton}
+          onClick={exportParticipation}
+        >
+          Participation CSV
+        </button>
+        <button type="button" className={secondaryButton} onClick={() => void shareLms()}>
+          {copied ? 'Copied' : 'Share for LMS'}
+        </button>
         {selectedSurvey.public_slug && (
           <Link
             to={`/surveys/${selectedSurvey.id}/present`}
@@ -242,6 +305,16 @@ export function ResultsPage() {
   )
 }
 
+function choiceIdsFor(questionId: string, response: SurveyResponse) {
+  const ids = new Set<string>()
+  for (const answer of response.answers) {
+    if (answer.question_id !== questionId) continue
+    if (answer.choice_ids) for (const id of answer.choice_ids) ids.add(id)
+    if (answer.choice_id) ids.add(answer.choice_id)
+  }
+  return ids
+}
+
 function QuestionResult({
   question,
   responses,
@@ -250,15 +323,73 @@ function QuestionResult({
   responses: SurveyResponse[]
 }) {
   const total = responses.length
+
+  if (question.question_type === 'short_answer') {
+    const texts = responses
+      .map(
+        (response) =>
+          response.answers.find((answer) => answer.question_id === question.id)
+            ?.text_answer,
+      )
+      .filter((text): text is string => Boolean(text?.trim()))
+    return (
+      <section className="rounded-lg border border-stone-200 bg-white p-5">
+        <h2 className="text-xl font-semibold text-stone-950">
+          {question.question_text}
+        </h2>
+        <p className="mt-2 text-sm text-stone-700">
+          {texts.length} written response{texts.length === 1 ? '' : 's'}
+        </p>
+        <ul className="mt-4 max-h-80 space-y-2 overflow-y-auto text-sm text-stone-800">
+          {texts.map((text, index) => (
+            <li
+              key={`${index}-${text.slice(0, 12)}`}
+              className="rounded-md border border-stone-200 px-3 py-2"
+            >
+              {text}
+            </li>
+          ))}
+        </ul>
+      </section>
+    )
+  }
+
+  if (question.question_type === 'numeric') {
+    const values = responses
+      .map(
+        (response) =>
+          response.answers.find((answer) => answer.question_id === question.id)
+            ?.numeric_value,
+      )
+      .filter((value): value is number => typeof value === 'number')
+    const min = values.length ? Math.min(...values) : 0
+    const max = values.length ? Math.max(...values) : 0
+    const avg = values.length
+      ? values.reduce((sum, value) => sum + value, 0) / values.length
+      : 0
+    return (
+      <section className="rounded-lg border border-stone-200 bg-white p-5">
+        <h2 className="text-xl font-semibold text-stone-950">
+          {question.question_text}
+        </h2>
+        <dl className="mt-4 grid gap-3 sm:grid-cols-4">
+          <Stat label="Responses" value={String(values.length)} />
+          <Stat label="Min" value={values.length ? String(min) : '—'} />
+          <Stat label="Max" value={values.length ? String(max) : '—'} />
+          <Stat
+            label="Average"
+            value={values.length ? avg.toFixed(1) : '—'}
+          />
+        </dl>
+      </section>
+    )
+  }
+
   const rows = [...question.choices]
     .sort((a, b) => a.position - b.position)
     .map((choice) => {
       const count = responses.filter((response) =>
-        response.answers.some(
-          (answer) =>
-            answer.question_id === question.id &&
-            answer.choice_id === choice.id,
-        ),
+        choiceIdsFor(question.id, response).has(choice.id),
       ).length
       return {
         choice_text: choice.choice_text,
@@ -266,11 +397,8 @@ function QuestionResult({
         label: `${count}  ${formatPercent(count, total)}`,
       }
     })
-  const answered = responses.filter((response) =>
-    response.answers.some(
-      (answer) =>
-        answer.question_id === question.id && answer.choice_id.length > 0,
-    ),
+  const answered = responses.filter(
+    (response) => choiceIdsFor(question.id, response).size > 0,
   ).length
   const unanswered = total - answered
   const summary = rows
@@ -334,5 +462,16 @@ function QuestionResult({
         ))}
       </ul>
     </section>
+  )
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-stone-200 px-3 py-2">
+      <dt className="text-xs uppercase tracking-wide text-stone-500">{label}</dt>
+      <dd className="mt-1 text-lg font-semibold tabular-nums text-stone-950">
+        {value}
+      </dd>
+    </div>
   )
 }

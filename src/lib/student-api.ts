@@ -20,6 +20,9 @@ type QuestionRow = {
   question_text: string
   question_type: QuestionType
   position: number
+  min_value: number | null
+  max_value: number | null
+  rating_max: number | null
   choices: ChoiceRow[] | null
 }
 
@@ -53,7 +56,7 @@ export async function loadStudentSurvey(
   const { data, error } = await studentSupabase
     .from('surveys')
     .select(
-      'id, title, description, status, questions(id, question_text, question_type, position, choices(id, choice_text, position))',
+      'id, title, description, status, questions(id, question_text, question_type, position, min_value, max_value, rating_max, choices(id, choice_text, position))',
     )
     .eq('public_slug', slug)
     .maybeSingle()
@@ -67,10 +70,21 @@ export async function submitStudentResponse(
   answers: SelectedAnswer[],
 ): Promise<StudentSubmitResult> {
   if (!studentSupabase) return { code: 'failed', message: notConnected }
+  const payload = answers.map((answer) => {
+    const row: Record<string, unknown> = { question_id: answer.question_id }
+    if (answer.choice_ids && answer.choice_ids.length > 0) {
+      row.choice_ids = answer.choice_ids
+    } else if (answer.choice_id) {
+      row.choice_id = answer.choice_id
+    }
+    if (answer.text_answer != null) row.text_answer = answer.text_answer
+    if (answer.numeric_value != null) row.numeric_value = answer.numeric_value
+    return row
+  })
   const { error } = await studentSupabase.rpc('submit_survey_response', {
     p_survey_id: surveyId,
     p_anonymous_token: getAnonymousToken(),
-    p_answers: answers,
+    p_answers: payload,
   })
   if (!error) {
     rememberSubmittedSurvey(surveyId)
@@ -91,7 +105,10 @@ function submissionResult(message: string): StudentSubmitResult {
     message.includes('INVALID_CHOICE') ||
     message.includes('MISSING_REQUIRED_ANSWER')
   ) {
-    return { code: 'invalid', message: 'Choose one answer for every question.' }
+    return {
+      code: 'invalid',
+      message: 'Answer every question before submitting.',
+    }
   }
   return {
     code: 'failed',
@@ -113,6 +130,9 @@ function toSurvey(row: StudentRow): StudentSurvey {
       question_text: question.question_text,
       question_type: question.question_type,
       position: question.position,
+      min_value: question.min_value,
+      max_value: question.max_value,
+      rating_max: question.rating_max,
       choices: [...(question.choices ?? [])]
         .sort((a, b) => a.position - b.position)
         .map((choice) => ({

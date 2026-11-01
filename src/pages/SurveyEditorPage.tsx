@@ -4,6 +4,12 @@ import { ConfirmDialog } from '../components/ConfirmDialog.tsx'
 import { FieldError } from '../components/FieldError.tsx'
 import { InstructorLayout } from '../components/InstructorLayout.tsx'
 import { StatusBadge } from '../components/StatusBadge.tsx'
+import { generateQuestionsWithAi } from '../lib/ai-api.ts'
+import {
+  bankToQuestion,
+  listBankQuestions,
+  saveQuestionToBank,
+} from '../lib/bank-api.ts'
 import {
   closeDashboardSurvey,
   duplicateDashboardSurvey,
@@ -14,20 +20,41 @@ import {
   saveEditorSurvey,
 } from '../lib/editor-api.ts'
 import {
+  addSurveyInstructor,
+  listSurveyInstructors,
+  removeSurveyInstructor,
+} from '../lib/instructor-api.ts'
+import { listCourses, listSemesters } from '../lib/org-api.ts'
+import {
   createChoice,
   createQuestion,
   createBlankSurvey,
   moveById,
   normalizeSurvey,
+  QUESTION_TYPE_LABELS,
+  ratingChoices,
   validateSurvey,
 } from '../lib/survey-form.ts'
+import {
+  exportSurveyJson,
+  parseSurveyJson,
+  parseSurveyMarkdown,
+} from '../lib/survey-io.ts'
 import {
   fieldLabel,
   primaryButton,
   secondaryButton,
   textInput,
 } from '../lib/styles.ts'
-import type { Question, QuestionType, Survey } from '../lib/types.ts'
+import type {
+  BankQuestion,
+  Course,
+  InstructorProfile,
+  Question,
+  QuestionType,
+  Semester,
+  Survey,
+} from '../lib/types.ts'
 import { usePageTitle } from '../lib/usePageTitle.ts'
 
 export function SurveyEditorPage() {
@@ -259,11 +286,36 @@ function EditorForm({
   const [questionToDelete, setQuestionToDelete] = useState<Question | null>(
     null,
   )
+  const [courses, setCourses] = useState<Course[]>([])
+  const [semesters, setSemesters] = useState<Semester[]>([])
+  const [bank, setBank] = useState<BankQuestion[]>([])
+  const [collaborators, setCollaborators] = useState<InstructorProfile[]>([])
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [aiTopic, setAiTopic] = useState('')
+  const [aiCount, setAiCount] = useState(3)
+  const [aiBusy, setAiBusy] = useState(false)
   usePageTitle(
     initial.status === 'draft' && initial.title === ''
       ? 'New Survey'
       : 'Edit Survey',
   )
+
+  useEffect(() => {
+    void Promise.all([listCourses(), listSemesters(), listBankQuestions()]).then(
+      ([courseResult, semesterResult, bankResult]) => {
+        if ('courses' in courseResult) setCourses(courseResult.courses)
+        if ('semesters' in semesterResult) setSemesters(semesterResult.semesters)
+        if ('questions' in bankResult) setBank(bankResult.questions)
+      },
+    )
+  }, [])
+
+  useEffect(() => {
+    if (!initial.id || redirectOnSave) return
+    void listSurveyInstructors(initial.id).then((result) => {
+      if ('instructors' in result) setCollaborators(result.instructors)
+    })
+  }, [initial.id, redirectOnSave])
 
   function changeDraft(next: Survey) {
     setNotice('')
@@ -325,6 +377,56 @@ function EditorForm({
     navigate(`/surveys/${activated.survey.id}/present`, { replace: true })
   }
 
+  function replaceQuestionType(question: Question, type: QuestionType): Question {
+    const next = createQuestion(type)
+    return {
+      ...next,
+      id: question.id,
+      question_text: question.question_text,
+      position: question.position,
+    }
+  }
+
+  async function onGenerateAi() {
+    setAiBusy(true)
+    setFormError('')
+    const result = await generateQuestionsWithAi({
+      title: draft.title,
+      description: draft.description,
+      topic: aiTopic || draft.title,
+      count: aiCount,
+    })
+    setAiBusy(false)
+    if ('error' in result) {
+      setFormError(result.error)
+      return
+    }
+    changeDraft({
+      ...draft,
+      questions: [...draft.questions, ...result.questions],
+    })
+    setNotice(`Added ${result.questions.length} AI-generated question(s).`)
+  }
+
+  async function onInvite() {
+    if (!inviteEmail.trim()) return
+    const saved = await saveEditorSurvey(normalizeSurvey(draft))
+    if ('error' in saved) {
+      setFormError(saved.error)
+      return
+    }
+    setDraft(saved.survey)
+    const result = await addSurveyInstructor(saved.survey.id, inviteEmail)
+    if (result.error) {
+      setFormError(result.error)
+      return
+    }
+    setInviteEmail('')
+    const list = await listSurveyInstructors(saved.survey.id)
+    if ('instructors' in list) setCollaborators(list.instructors)
+    setNotice('Instructor added.')
+  }
+
   const pageTitle = redirectOnSave ? 'New Survey' : 'Edit Survey'
 
   return (
@@ -381,6 +483,263 @@ function EditorForm({
             />
           </div>
 
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="survey-course" className={fieldLabel}>
+                Course
+              </label>
+              <select
+                id="survey-course"
+                value={draft.course_id ?? ''}
+                onChange={(event) =>
+                  changeDraft({
+                    ...draft,
+                    course_id: event.target.value || null,
+                  })
+                }
+                className={textInput}
+              >
+                <option value="">None</option>
+                {courses.map((course) => (
+                  <option key={course.id} value={course.id}>
+                    {course.code} — {course.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="survey-semester" className={fieldLabel}>
+                Semester
+              </label>
+              <select
+                id="survey-semester"
+                value={draft.semester_id ?? ''}
+                onChange={(event) =>
+                  changeDraft({
+                    ...draft,
+                    semester_id: event.target.value || null,
+                  })
+                }
+                className={textInput}
+              >
+                <option value="">None</option>
+                {semesters.map((semester) => (
+                  <option key={semester.id} value={semester.id}>
+                    {semester.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <label htmlFor="lms-url" className={fieldLabel}>
+              LMS course URL (optional)
+            </label>
+            <input
+              id="lms-url"
+              value={draft.lms_course_url ?? ''}
+              onChange={(event) =>
+                changeDraft({
+                  ...draft,
+                  lms_course_url: event.target.value,
+                })
+              }
+              className={textInput}
+              placeholder="https://canvas.example.edu/courses/123"
+            />
+          </div>
+
+          <div className="mt-6 flex flex-wrap gap-2">
+            <button
+              type="button"
+              className={secondaryButton}
+              onClick={() => exportSurveyJson(draft)}
+            >
+              Export JSON
+            </button>
+            <label className={secondaryButton}>
+              Import JSON
+              <input
+                type="file"
+                accept="application/json,.json"
+                className="sr-only"
+                onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  event.target.value = ''
+                  if (!file) return
+                  void file.text().then((text) => {
+                    try {
+                      changeDraft(parseSurveyJson(text))
+                      setNotice('Imported survey from JSON.')
+                    } catch (err) {
+                      setFormError(
+                        err instanceof Error
+                          ? err.message
+                          : 'Could not import JSON.',
+                      )
+                    }
+                  })
+                }}
+              />
+            </label>
+            <label className={secondaryButton}>
+              Import Markdown
+              <input
+                type="file"
+                accept=".md,text/markdown,text/plain"
+                className="sr-only"
+                onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  event.target.value = ''
+                  if (!file) return
+                  void file.text().then((text) => {
+                    try {
+                      changeDraft(parseSurveyMarkdown(text))
+                      setNotice('Imported survey from Markdown.')
+                    } catch (err) {
+                      setFormError(
+                        err instanceof Error
+                          ? err.message
+                          : 'Could not import Markdown.',
+                      )
+                    }
+                  })
+                }}
+              />
+            </label>
+          </div>
+
+          <section className="mt-6 rounded-lg border border-stone-200 bg-white p-5">
+            <h2 className="text-lg font-semibold text-stone-950">
+              AI question generator
+            </h2>
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <div className="sm:col-span-2">
+                <label htmlFor="ai-topic" className={fieldLabel}>
+                  Topic
+                </label>
+                <input
+                  id="ai-topic"
+                  value={aiTopic}
+                  onChange={(event) => setAiTopic(event.target.value)}
+                  className={textInput}
+                  placeholder="Lecture clarity"
+                />
+              </div>
+              <div>
+                <label htmlFor="ai-count" className={fieldLabel}>
+                  Count
+                </label>
+                <input
+                  id="ai-count"
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={aiCount}
+                  onChange={(event) =>
+                    setAiCount(Number(event.target.value) || 1)
+                  }
+                  className={textInput}
+                />
+              </div>
+            </div>
+            <button
+              type="button"
+              className={`${secondaryButton} mt-3`}
+              disabled={aiBusy}
+              onClick={() => void onGenerateAi()}
+            >
+              {aiBusy ? 'Generating...' : 'Generate with AI'}
+            </button>
+          </section>
+
+          {!redirectOnSave && (
+            <section className="mt-6 rounded-lg border border-stone-200 bg-white p-5">
+              <h2 className="text-lg font-semibold text-stone-950">
+                Instructors
+              </h2>
+              <ul className="mt-3 space-y-1 text-sm text-stone-800">
+                {collaborators.map((person) => (
+                  <li
+                    key={person.id}
+                    className="flex flex-wrap items-center justify-between gap-2"
+                  >
+                    <span>{person.email}</span>
+                    <button
+                      type="button"
+                      className={secondaryButton}
+                      onClick={() =>
+                        void removeSurveyInstructor(draft.id, person.id).then(
+                          async () => {
+                            const list = await listSurveyInstructors(draft.id)
+                            if ('instructors' in list)
+                              setCollaborators(list.instructors)
+                          },
+                        )
+                      }
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <input
+                  value={inviteEmail}
+                  onChange={(event) => setInviteEmail(event.target.value)}
+                  className={`${textInput} sm:max-w-xs`}
+                  placeholder="colleague@school.edu"
+                />
+                <button
+                  type="button"
+                  className={secondaryButton}
+                  onClick={() => void onInvite()}
+                >
+                  Add instructor
+                </button>
+              </div>
+            </section>
+          )}
+
+          {bank.length > 0 && (
+            <section className="mt-6 rounded-lg border border-stone-200 bg-white p-5">
+              <h2 className="text-lg font-semibold text-stone-950">
+                Add from question bank
+              </h2>
+              <ul className="mt-3 space-y-2">
+                {bank.map((item) => (
+                  <li
+                    key={item.id}
+                    className="flex flex-wrap items-center justify-between gap-2"
+                  >
+                    <span className="text-sm text-stone-800">
+                      <span className="font-medium">
+                        {QUESTION_TYPE_LABELS[item.question_type]}:
+                      </span>{' '}
+                      {item.question_text}
+                    </span>
+                    <button
+                      type="button"
+                      className={secondaryButton}
+                      onClick={() =>
+                        changeDraft({
+                          ...draft,
+                          questions: [
+                            ...draft.questions,
+                            bankToQuestion(item),
+                          ],
+                        })
+                      }
+                    >
+                      Add
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
           <div className="mt-6 space-y-4">
             {draft.questions.map((question, index) => (
               <QuestionCard
@@ -389,43 +748,22 @@ function EditorForm({
                 index={index}
                 total={draft.questions.length}
                 errors={errors}
-                onText={(text) =>
+                onChange={(next) =>
                   changeDraft({
                     ...draft,
                     questions: draft.questions.map((item) =>
-                      item.id === question.id
-                        ? { ...item, question_text: text }
-                        : item,
+                      item.id === question.id ? next : item,
                     ),
                   })
                 }
                 onType={(type) =>
                   changeDraft({
                     ...draft,
-                    questions: draft.questions.map((item) => {
-                      if (item.id !== question.id) return item
-                      if (type === 'true_false') {
-                        return {
-                          ...item,
-                          question_type: type,
-                          choices: [
-                            createChoice('True'),
-                            createChoice('False'),
-                          ],
-                        }
-                      }
-                      const isFixedPair =
-                        item.choices.length === 2 &&
-                        item.choices[0]?.choice_text === 'True' &&
-                        item.choices[1]?.choice_text === 'False'
-                      return {
-                        ...item,
-                        question_type: type,
-                        choices: isFixedPair
-                          ? [createChoice(), createChoice()]
-                          : item.choices,
-                      }
-                    }),
+                    questions: draft.questions.map((item) =>
+                      item.id === question.id
+                        ? replaceQuestionType(item, type)
+                        : item,
+                    ),
                   })
                 }
                 onMove={(direction) =>
@@ -439,66 +777,16 @@ function EditorForm({
                   })
                 }
                 onDelete={() => setQuestionToDelete(question)}
-                onChoiceText={(choiceId, text) =>
-                  changeDraft({
-                    ...draft,
-                    questions: draft.questions.map((item) =>
-                      item.id === question.id
-                        ? {
-                            ...item,
-                            choices: item.choices.map((choice) =>
-                              choice.id === choiceId
-                                ? { ...choice, choice_text: text }
-                                : choice,
-                            ),
-                          }
-                        : item,
-                    ),
-                  })
-                }
-                onAddChoice={() =>
-                  changeDraft({
-                    ...draft,
-                    questions: draft.questions.map((item) =>
-                      item.id === question.id
-                        ? {
-                            ...item,
-                            choices: [...item.choices, createChoice()],
-                          }
-                        : item,
-                    ),
-                  })
-                }
-                onRemoveChoice={(choiceId) =>
-                  changeDraft({
-                    ...draft,
-                    questions: draft.questions.map((item) =>
-                      item.id === question.id
-                        ? {
-                            ...item,
-                            choices: item.choices.filter(
-                              (choice) => choice.id !== choiceId,
-                            ),
-                          }
-                        : item,
-                    ),
-                  })
-                }
-                onMoveChoice={(choiceId, direction) =>
-                  changeDraft({
-                    ...draft,
-                    questions: draft.questions.map((item) =>
-                      item.id === question.id
-                        ? {
-                            ...item,
-                            choices: moveById(
-                              item.choices,
-                              choiceId,
-                              direction,
-                            ),
-                          }
-                        : item,
-                    ),
+                onSaveToBank={() =>
+                  void saveQuestionToBank(question).then((result) => {
+                    if (result.error) setFormError(result.error)
+                    else {
+                      setNotice('Saved to question bank.')
+                      void listBankQuestions().then((bankResult) => {
+                        if ('questions' in bankResult)
+                          setBank(bankResult.questions)
+                      })
+                    }
                   })
                 }
               />
@@ -507,18 +795,25 @@ function EditorForm({
 
           <FieldError>{errors.questions}</FieldError>
 
-          <button
-            type="button"
-            className={`${secondaryButton} mt-6`}
-            onClick={() =>
-              changeDraft({
-                ...draft,
-                questions: [...draft.questions, createQuestion()],
-              })
-            }
-          >
-            + Add Question
-          </button>
+          <div className="mt-6 flex flex-wrap gap-2">
+            {(
+              Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]
+            ).map((type) => (
+              <button
+                key={type}
+                type="button"
+                className={secondaryButton}
+                onClick={() =>
+                  changeDraft({
+                    ...draft,
+                    questions: [...draft.questions, createQuestion(type)],
+                  })
+                }
+              >
+                + {QUESTION_TYPE_LABELS[type]}
+              </button>
+            ))}
+          </div>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <button type="submit" className={secondaryButton}>
@@ -571,29 +866,26 @@ function QuestionCard({
   index,
   total,
   errors,
-  onText,
+  onChange,
   onType,
   onMove,
   onDelete,
-  onChoiceText,
-  onAddChoice,
-  onRemoveChoice,
-  onMoveChoice,
+  onSaveToBank,
 }: {
   question: Question
   index: number
   total: number
   errors: Record<string, string>
-  onText: (text: string) => void
+  onChange: (question: Question) => void
   onType: (type: QuestionType) => void
   onMove: (direction: -1 | 1) => void
   onDelete: () => void
-  onChoiceText: (choiceId: string, text: string) => void
-  onAddChoice: () => void
-  onRemoveChoice: (choiceId: string) => void
-  onMoveChoice: (choiceId: string, direction: -1 | 1) => void
+  onSaveToBank: () => void
 }) {
   const questionErrorId = `question-${question.id}-error`
+  const editableChoices =
+    question.question_type === 'multiple_choice' ||
+    question.question_type === 'checkbox'
 
   return (
     <article className="rounded-lg border border-stone-200 bg-white p-5">
@@ -630,7 +922,9 @@ function QuestionCard({
         <input
           id={`question-${question.id}`}
           value={question.question_text}
-          onChange={(event) => onText(event.target.value)}
+          onChange={(event) =>
+            onChange({ ...question, question_text: event.target.value })
+          }
           aria-invalid={errors[`question-${question.id}`] ? true : undefined}
           aria-describedby={
             errors[`question-${question.id}`] ? questionErrorId : undefined
@@ -652,23 +946,103 @@ function QuestionCard({
           onChange={(event) => onType(event.target.value as QuestionType)}
           className={textInput}
         >
-          <option value="multiple_choice">Multiple Choice</option>
-          <option value="true_false">True / False</option>
+          {(Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]).map((type) => (
+            <option key={type} value={type}>
+              {QUESTION_TYPE_LABELS[type]}
+            </option>
+          ))}
         </select>
       </div>
 
-      <fieldset className="mt-4 border-0 p-0">
-        <legend className={fieldLabel}>Choices</legend>
-        {question.question_type === 'true_false' ? (
-          <ul className="mt-2 space-y-2 text-base text-stone-800">
-            <li className="rounded-md border border-stone-200 px-3 py-2">
-              True
-            </li>
-            <li className="rounded-md border border-stone-200 px-3 py-2">
-              False
-            </li>
-          </ul>
-        ) : (
+      {question.question_type === 'rating_scale' && (
+        <div className="mt-4 sm:max-w-xs">
+          <label htmlFor={`rating-${question.id}`} className={fieldLabel}>
+            Scale max (2–10)
+          </label>
+          <input
+            id={`rating-${question.id}`}
+            type="number"
+            min={2}
+            max={10}
+            value={question.rating_max ?? 5}
+            onChange={(event) => {
+              const rating_max = Number(event.target.value) || 5
+              onChange({
+                ...question,
+                rating_max,
+                choices: ratingChoices(rating_max),
+              })
+            }}
+            className={textInput}
+          />
+          <FieldError>{errors[`rating-${question.id}`]}</FieldError>
+        </div>
+      )}
+
+      {question.question_type === 'numeric' && (
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 sm:max-w-md">
+          <div>
+            <label htmlFor={`min-${question.id}`} className={fieldLabel}>
+              Minimum
+            </label>
+            <input
+              id={`min-${question.id}`}
+              type="number"
+              value={question.min_value ?? ''}
+              onChange={(event) =>
+                onChange({
+                  ...question,
+                  min_value:
+                    event.target.value === ''
+                      ? null
+                      : Number(event.target.value),
+                })
+              }
+              className={textInput}
+            />
+          </div>
+          <div>
+            <label htmlFor={`max-${question.id}`} className={fieldLabel}>
+              Maximum
+            </label>
+            <input
+              id={`max-${question.id}`}
+              type="number"
+              value={question.max_value ?? ''}
+              onChange={(event) =>
+                onChange({
+                  ...question,
+                  max_value:
+                    event.target.value === ''
+                      ? null
+                      : Number(event.target.value),
+                })
+              }
+              className={textInput}
+            />
+          </div>
+          <FieldError>{errors[`numeric-${question.id}`]}</FieldError>
+        </div>
+      )}
+
+      {question.question_type === 'true_false' && (
+        <ul className="mt-4 space-y-2 text-base text-stone-800">
+          <li className="rounded-md border border-stone-200 px-3 py-2">True</li>
+          <li className="rounded-md border border-stone-200 px-3 py-2">
+            False
+          </li>
+        </ul>
+      )}
+
+      {question.question_type === 'rating_scale' && (
+        <p className="mt-4 text-sm text-stone-700">
+          Choices: {question.choices.map((choice) => choice.choice_text).join(', ')}
+        </p>
+      )}
+
+      {editableChoices && (
+        <fieldset className="mt-4 border-0 p-0">
+          <legend className={fieldLabel}>Choices</legend>
           <div className="mt-2 space-y-3">
             {question.choices.map((choice, choiceIndex) => (
               <div key={choice.id} className="flex flex-wrap items-start gap-2">
@@ -680,15 +1054,14 @@ function QuestionCard({
                     id={choice.id}
                     value={choice.choice_text}
                     onChange={(event) =>
-                      onChoiceText(choice.id, event.target.value)
-                    }
-                    aria-invalid={
-                      errors[`choice-${choice.id}`] ? true : undefined
-                    }
-                    aria-describedby={
-                      errors[`choice-${choice.id}`]
-                        ? `choice-${choice.id}-error`
-                        : undefined
+                      onChange({
+                        ...question,
+                        choices: question.choices.map((item) =>
+                          item.id === choice.id
+                            ? { ...item, choice_text: event.target.value }
+                            : item,
+                        ),
+                      })
                     }
                     className={textInput}
                   />
@@ -699,18 +1072,26 @@ function QuestionCard({
                 <button
                   type="button"
                   className={secondaryButton}
-                  onClick={() => onMoveChoice(choice.id, -1)}
+                  onClick={() =>
+                    onChange({
+                      ...question,
+                      choices: moveById(question.choices, choice.id, -1),
+                    })
+                  }
                   disabled={choiceIndex === 0}
-                  aria-label={`Move choice ${choiceIndex + 1} up`}
                 >
                   Up
                 </button>
                 <button
                   type="button"
                   className={secondaryButton}
-                  onClick={() => onMoveChoice(choice.id, 1)}
+                  onClick={() =>
+                    onChange({
+                      ...question,
+                      choices: moveById(question.choices, choice.id, 1),
+                    })
+                  }
                   disabled={choiceIndex === question.choices.length - 1}
-                  aria-label={`Move choice ${choiceIndex + 1} down`}
                 >
                   Down
                 </button>
@@ -718,8 +1099,14 @@ function QuestionCard({
                   <button
                     type="button"
                     className={secondaryButton}
-                    onClick={() => onRemoveChoice(choice.id)}
-                    aria-label={`Remove choice ${choiceIndex + 1}`}
+                    onClick={() =>
+                      onChange({
+                        ...question,
+                        choices: question.choices.filter(
+                          (item) => item.id !== choice.id,
+                        ),
+                      })
+                    }
                   >
                     Remove
                   </button>
@@ -730,21 +1117,27 @@ function QuestionCard({
             <button
               type="button"
               className={secondaryButton}
-              onClick={onAddChoice}
+              onClick={() =>
+                onChange({
+                  ...question,
+                  choices: [...question.choices, createChoice()],
+                })
+              }
             >
               + Add Choice
             </button>
           </div>
-        )}
-      </fieldset>
+        </fieldset>
+      )}
 
-      <button
-        type="button"
-        className={`${secondaryButton} mt-4`}
-        onClick={onDelete}
-      >
-        Delete Question
-      </button>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button type="button" className={secondaryButton} onClick={onSaveToBank}>
+          Save to bank
+        </button>
+        <button type="button" className={secondaryButton} onClick={onDelete}>
+          Delete Question
+        </button>
+      </div>
     </article>
   )
 }

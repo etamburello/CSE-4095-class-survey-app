@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { toDataURL } from 'qrcode'
 import { ConfirmDialog } from '../components/ConfirmDialog.tsx'
 import { StatusBadge } from '../components/StatusBadge.tsx'
+import { lmsShareText } from '../lib/csv.ts'
 import { closeDashboardSurvey } from '../lib/dashboard-api.ts'
 import { loadPresentSurvey, type PresentSurvey } from '../lib/present-api.ts'
 import { primaryButton, secondaryButton, textLink } from '../lib/styles.ts'
@@ -18,6 +19,7 @@ export function PresentPage() {
   const [qrError, setQrError] = useState(false)
   const [confirmClose, setConfirmClose] = useState(false)
   const [closing, setClosing] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   usePageTitle(survey ? survey.title : 'Present survey')
 
@@ -203,6 +205,34 @@ export function PresentPage() {
           >
             View Results
           </Link>
+          {survey.public_slug && (
+            <button
+              type="button"
+              className={secondaryButton}
+              onClick={() => {
+                void navigator.clipboard
+                  .writeText(
+                    lmsShareText({
+                      title: survey.title,
+                      description: '',
+                      status: survey.status,
+                      id: survey.id,
+                      public_slug: survey.public_slug,
+                      created_at: '',
+                      updated_at: '',
+                      questions: [],
+                      lms_course_url: null,
+                    }),
+                  )
+                  .then(() => {
+                    setCopied(true)
+                    window.setTimeout(() => setCopied(false), 2000)
+                  })
+              }}
+            >
+              {copied ? 'Copied' : 'Share for LMS'}
+            </button>
+          )}
           {survey.status === 'active' && (
             <button
               type="button"

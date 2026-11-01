@@ -7,6 +7,7 @@ import {
 } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { AuthContext } from '../lib/auth-context.ts'
+import { ensureInstructor } from '../lib/instructor-api.ts'
 import { supabase } from '../lib/supabase.ts'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -24,12 +25,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data } = supabase.auth.onAuthStateChange((_event, next) => {
       setSession(next)
       setLoading(false)
+      if (next?.user) void ensureInstructor()
     })
     return () => {
       active = false
       data.subscription.unsubscribe()
     }
   }, [])
+
+  useEffect(() => {
+    if (session?.user) void ensureInstructor()
+  }, [session?.user])
 
   const signIn = useCallback(async (email: string, password: string) => {
     if (!supabase) return 'This app is not connected to Supabase yet.'

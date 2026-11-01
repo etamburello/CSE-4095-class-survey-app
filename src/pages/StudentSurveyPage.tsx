@@ -7,11 +7,18 @@ import {
   type StudentSurvey,
 } from '../lib/student-api.ts'
 import { hasSubmittedSurvey } from '../lib/student-token.ts'
-import { primaryButton } from '../lib/styles.ts'
+import { primaryButton, textInput } from '../lib/styles.ts'
 import type { Question, SelectedAnswer } from '../lib/types.ts'
 import { usePageTitle } from '../lib/usePageTitle.ts'
 
 type Phase = 'form' | 'submitting' | 'success' | 'closed' | 'duplicate'
+
+type AnswerState = {
+  choiceId?: string
+  choiceIds?: string[]
+  text?: string
+  numeric?: string
+}
 
 export function StudentSurveyPage() {
   const { slug } = useParams()
@@ -19,7 +26,7 @@ export function StudentSurveyPage() {
   const [loading, setLoading] = useState(true)
   const [missing, setMissing] = useState(false)
   const [loadError, setLoadError] = useState<string>()
-  const [answers, setAnswers] = useState<Record<string, string>>({})
+  const [answers, setAnswers] = useState<Record<string, AnswerState>>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState('')
   const [phase, setPhase] = useState<Phase>('form')
@@ -100,15 +107,68 @@ export function StudentSurveyPage() {
     (a, b) => a.position - b.position,
   )
 
+  function setAnswer(questionId: string, patch: AnswerState) {
+    setAnswers((current) => ({
+      ...current,
+      [questionId]: { ...current[questionId], ...patch },
+    }))
+    setErrors((current) => {
+      const next = { ...current }
+      delete next[questionId]
+      return next
+    })
+  }
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!survey || phase === 'submitting') return
     const nextErrors: Record<string, string> = {}
     const selected: SelectedAnswer[] = []
     for (const question of questions) {
-      const choiceId = answers[question.id]
-      if (!choiceId) nextErrors[question.id] = 'Select an answer.'
-      else selected.push({ question_id: question.id, choice_id: choiceId })
+      const value = answers[question.id] ?? {}
+      if (
+        question.question_type === 'multiple_choice' ||
+        question.question_type === 'true_false' ||
+        question.question_type === 'rating_scale'
+      ) {
+        if (!value.choiceId) nextErrors[question.id] = 'Select an answer.'
+        else
+          selected.push({
+            question_id: question.id,
+            choice_id: value.choiceId,
+          })
+      } else if (question.question_type === 'checkbox') {
+        if (!value.choiceIds || value.choiceIds.length === 0) {
+          nextErrors[question.id] = 'Select at least one choice.'
+        } else {
+          selected.push({
+            question_id: question.id,
+            choice_ids: value.choiceIds,
+          })
+        }
+      } else if (question.question_type === 'short_answer') {
+        const text = value.text?.trim() ?? ''
+        if (!text) nextErrors[question.id] = 'Enter an answer.'
+        else selected.push({ question_id: question.id, text_answer: text })
+      } else if (question.question_type === 'numeric') {
+        const raw = value.numeric?.trim() ?? ''
+        const num = Number(raw)
+        if (!raw || Number.isNaN(num)) {
+          nextErrors[question.id] = 'Enter a number.'
+        } else if (
+          question.min_value != null &&
+          num < question.min_value
+        ) {
+          nextErrors[question.id] = `Minimum is ${question.min_value}.`
+        } else if (
+          question.max_value != null &&
+          num > question.max_value
+        ) {
+          nextErrors[question.id] = `Maximum is ${question.max_value}.`
+        } else {
+          selected.push({ question_id: question.id, numeric_value: num })
+        }
+      }
     }
     setErrors(nextErrors)
     setFormError('')
@@ -147,17 +207,10 @@ export function StudentSurveyPage() {
             key={question.id}
             question={question}
             index={index}
-            selected={answers[question.id] ?? ''}
+            value={answers[question.id] ?? {}}
             error={errors[question.id]}
             disabled={phase === 'submitting'}
-            onSelect={(choiceId) => {
-              setAnswers((current) => ({ ...current, [question.id]: choiceId }))
-              setErrors((current) => {
-                const next = { ...current }
-                delete next[question.id]
-                return next
-              })
-            }}
+            onChange={(patch) => setAnswer(question.id, patch)}
           />
         ))}
         {formError && (
@@ -180,20 +233,115 @@ export function StudentSurveyPage() {
 function QuestionField({
   question,
   index,
-  selected,
+  value,
   error,
   disabled,
-  onSelect,
+  onChange,
 }: {
   question: Question
   index: number
-  selected: string
+  value: AnswerState
   error?: string
   disabled: boolean
-  onSelect: (choiceId: string) => void
+  onChange: (patch: AnswerState) => void
 }) {
   const errorId = `question-${question.id}-error`
   const choices = [...question.choices].sort((a, b) => a.position - b.position)
+
+  if (question.question_type === 'short_answer') {
+    return (
+      <div className="mt-8 first:mt-0">
+        <label
+          htmlFor={`q-${question.id}`}
+          className="text-lg font-semibold text-stone-950"
+        >
+          {index + 1}. {question.question_text}
+        </label>
+        <textarea
+          id={`q-${question.id}`}
+          rows={3}
+          value={value.text ?? ''}
+          disabled={disabled}
+          onChange={(event) => onChange({ text: event.target.value })}
+          className={`${textInput} mt-3`}
+          aria-describedby={error ? errorId : undefined}
+        />
+        <FieldError id={errorId}>{error}</FieldError>
+      </div>
+    )
+  }
+
+  if (question.question_type === 'numeric') {
+    return (
+      <div className="mt-8 first:mt-0">
+        <label
+          htmlFor={`q-${question.id}`}
+          className="text-lg font-semibold text-stone-950"
+        >
+          {index + 1}. {question.question_text}
+        </label>
+        <p className="mt-1 text-sm text-stone-600">
+          {question.min_value != null && question.max_value != null
+            ? `Enter a number from ${question.min_value} to ${question.max_value}.`
+            : 'Enter a number.'}
+        </p>
+        <input
+          id={`q-${question.id}`}
+          type="number"
+          value={value.numeric ?? ''}
+          disabled={disabled}
+          min={question.min_value ?? undefined}
+          max={question.max_value ?? undefined}
+          onChange={(event) => onChange({ numeric: event.target.value })}
+          className={`${textInput} mt-3`}
+          aria-describedby={error ? errorId : undefined}
+        />
+        <FieldError id={errorId}>{error}</FieldError>
+      </div>
+    )
+  }
+
+  if (question.question_type === 'checkbox') {
+    const selected = new Set(value.choiceIds ?? [])
+    return (
+      <fieldset className="mt-8 border-0 p-0 first:mt-0" disabled={disabled}>
+        <legend className="text-lg font-semibold text-stone-950">
+          {index + 1}. {question.question_text}
+        </legend>
+        <p className="mt-1 text-sm text-stone-600">Select all that apply.</p>
+        <div className="mt-3 space-y-3">
+          {choices.map((choice) => {
+            const isSelected = selected.has(choice.id)
+            return (
+              <label
+                key={choice.id}
+                className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border px-4 py-3 text-base ${
+                  isSelected
+                    ? 'border-slate-900 bg-slate-50'
+                    : 'border-stone-300 bg-white'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={() => {
+                    const next = new Set(selected)
+                    if (next.has(choice.id)) next.delete(choice.id)
+                    else next.add(choice.id)
+                    onChange({ choiceIds: [...next] })
+                  }}
+                  className="size-5 accent-slate-900"
+                  aria-describedby={error ? errorId : undefined}
+                />
+                <span>{choice.choice_text}</span>
+              </label>
+            )
+          })}
+        </div>
+        <FieldError id={errorId}>{error}</FieldError>
+      </fieldset>
+    )
+  }
 
   return (
     <fieldset className="mt-8 border-0 p-0 first:mt-0" disabled={disabled}>
@@ -202,7 +350,7 @@ function QuestionField({
       </legend>
       <div className="mt-3 space-y-3">
         {choices.map((choice) => {
-          const isSelected = selected === choice.id
+          const isSelected = value.choiceId === choice.id
           return (
             <label
               key={choice.id}
@@ -217,7 +365,7 @@ function QuestionField({
                 name={question.id}
                 value={choice.id}
                 checked={isSelected}
-                onChange={() => onSelect(choice.id)}
+                onChange={() => onChange({ choiceId: choice.id })}
                 className="size-5 accent-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
                 aria-describedby={error ? errorId : undefined}
               />

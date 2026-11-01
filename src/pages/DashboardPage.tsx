@@ -4,6 +4,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog.tsx'
 import { InstructorLayout } from '../components/InstructorLayout.tsx'
 import { StatusBadge } from '../components/StatusBadge.tsx'
 import type { DashboardSurvey } from '../lib/dashboard-api.ts'
+import { saveEditorSurvey } from '../lib/editor-api.ts'
 import { formatDate, matchesDateRange } from '../lib/format.ts'
 import {
   dangerQuietButton,
@@ -12,6 +13,7 @@ import {
   secondaryButton,
   textInput,
 } from '../lib/styles.ts'
+import { parseSurveyJson, parseSurveyMarkdown } from '../lib/survey-io.ts'
 import type { SurveyStatus } from '../lib/types.ts'
 import { useDashboardSurveys } from '../lib/useDashboardSurveys.ts'
 import { usePageTitle } from '../lib/usePageTitle.ts'
@@ -42,11 +44,35 @@ export function DashboardPage() {
   const [status, setStatus] = useState<StatusFilter>('all')
   const [pending, setPending] = useState<PendingAction | null>(null)
   const [activateErrorId, setActivateErrorId] = useState<string | null>(null)
+  const [importError, setImportError] = useState<string>()
+  const [importing, setImporting] = useState(false)
   usePageTitle('Dashboard')
 
   async function onDuplicate(id: string) {
     const result = await duplicate(id)
     if ('id' in result) navigate(`/surveys/${result.id}/edit`)
+  }
+
+  async function importFile(file: File, kind: 'json' | 'markdown') {
+    setImporting(true)
+    setImportError(undefined)
+    try {
+      const text = await file.text()
+      const survey =
+        kind === 'json' ? parseSurveyJson(text) : parseSurveyMarkdown(text)
+      const saved = await saveEditorSurvey(survey)
+      if ('error' in saved) {
+        setImportError(saved.error)
+        return
+      }
+      navigate(`/surveys/${saved.survey.id}/edit`)
+    } catch (err) {
+      setImportError(
+        err instanceof Error ? err.message : 'Could not import the survey.',
+      )
+    } finally {
+      setImporting(false)
+    }
   }
 
   const normalizedQuery = query.trim().toLowerCase()
@@ -139,9 +165,45 @@ export function DashboardPage() {
         </div>
       </div>
 
+      <div className="mt-4 flex flex-wrap gap-2">
+        <label className={secondaryButton}>
+          {importing ? 'Importing...' : 'Import JSON'}
+          <input
+            type="file"
+            accept="application/json,.json"
+            className="sr-only"
+            disabled={importing}
+            onChange={(event) => {
+              const file = event.target.files?.[0]
+              event.target.value = ''
+              if (file) void importFile(file, 'json')
+            }}
+          />
+        </label>
+        <label className={secondaryButton}>
+          {importing ? 'Importing...' : 'Import Markdown'}
+          <input
+            type="file"
+            accept=".md,text/markdown,text/plain"
+            className="sr-only"
+            disabled={importing}
+            onChange={(event) => {
+              const file = event.target.files?.[0]
+              event.target.value = ''
+              if (file) void importFile(file, 'markdown')
+            }}
+          />
+        </label>
+      </div>
+
       {error && (
         <p role="alert" className="mt-4 text-sm text-red-700">
           {error}
+        </p>
+      )}
+      {importError && (
+        <p role="alert" className="mt-4 text-sm text-red-700">
+          {importError}
         </p>
       )}
 

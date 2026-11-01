@@ -258,16 +258,20 @@ Verified on Cloudflare Pages at `https://cse-4095-class-survey-app.pages.dev`, c
 
 # Phase 16 — Post-MVP Enhancements
 
-- [ ] Add live updating results with Supabase Realtime.
-- [ ] Add question bank.
-- [ ] Add survey import/export as JSON.
-- [ ] Add Markdown import.
-- [ ] Add short-answer questions.
-- [ ] Add checkbox questions.
-- [ ] Add rating-scale questions.
-- [ ] Add numeric questions.
-- [ ] Add AI-assisted question generation.
-- [ ] Add LMS integration.
-- [ ] Add multiple instructors.
-- [ ] Add course and semester organization.
-- [ ] Add analytics across multiple surveys.
+- [x] Add live updating results with Supabase Realtime.
+- [x] Add question bank.
+- [x] Add survey import/export as JSON.
+- [x] Add Markdown import.
+- [x] Add short-answer questions.
+- [x] Add checkbox questions.
+- [x] Add rating-scale questions.
+- [x] Add numeric questions.
+- [x] Add AI-assisted question generation.
+- [x] Add LMS integration.
+- [x] Add multiple instructors.
+- [x] Add course and semester organization.
+- [x] Add analytics across multiple surveys.
+
+Verified: Phase 16 migration applied (`instructors`, `courses`, `semesters`, `question_bank`, `survey_instructors`, expanded question types, Realtime on `responses`, updated `submit_survey_response`). App build/lint pass. Results subscribe live; editor supports new types, bank, JSON/Markdown import-export, AI generate panel, LMS share/participation CSV, co-instructors, course/semester assignment; pages for bank/courses/semesters/analytics. AI needs `OPENAI_API_KEY` + `generate-questions` Edge Function deploy (documented in README).
+
+---

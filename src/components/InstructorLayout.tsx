@@ -49,6 +49,18 @@ export function InstructorLayout({
               <Link to="/surveys/new" className={primaryButton}>
                 New Survey
               </Link>
+              <Link to="/question-bank" className={secondaryButton}>
+                Question Bank
+              </Link>
+              <Link to="/courses" className={secondaryButton}>
+                Courses
+              </Link>
+              <Link to="/semesters" className={secondaryButton}>
+                Semesters
+              </Link>
+              <Link to="/analytics" className={secondaryButton}>
+                Analytics
+              </Link>
               <button
                 type="button"
                 className={secondaryButton}

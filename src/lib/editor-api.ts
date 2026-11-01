@@ -1,4 +1,5 @@
 import type { Question, QuestionType, Survey, SurveyStatus } from './types.ts'
+import { ensureInstructor } from './instructor-api.ts'
 import { supabase } from './supabase.ts'
 
 const SLUG_ALPHABET = 'abcdefghijkmnopqrstuvwxyz23456789'
@@ -15,6 +16,9 @@ type QuestionRow = {
   question_text: string
   question_type: QuestionType
   position: number
+  min_value: number | null
+  max_value: number | null
+  rating_max: number | null
   choices: ChoiceRow[] | null
 }
 
@@ -26,11 +30,15 @@ type EditorRow = {
   public_slug: string | null
   created_at: string
   updated_at: string
+  owner_id: string | null
+  course_id: string | null
+  semester_id: string | null
+  lms_course_url: string | null
   questions: QuestionRow[] | null
 }
 
 const surveyColumns =
-  'id, title, description, status, public_slug, created_at, updated_at, questions(id, question_text, question_type, position, choices(id, choice_text, position))'
+  'id, title, description, status, public_slug, created_at, updated_at, owner_id, course_id, semester_id, lms_course_url, questions(id, question_text, question_type, position, min_value, max_value, rating_max, choices(id, choice_text, position))'
 
 export async function loadEditorSurvey(
   id: string,
@@ -54,9 +62,12 @@ export async function saveEditorSurvey(
 ): Promise<{ survey: Survey } | { error: string }> {
   if (!supabase) return { error: notConnected }
 
+  const profile = await ensureInstructor()
+  if ('error' in profile) return { error: profile.error }
+
   const { data: existing, error: lookupError } = await supabase
     .from('surveys')
-    .select('id, status, public_slug, created_at')
+    .select('id, status, public_slug, created_at, owner_id')
     .eq('id', survey.id)
     .maybeSingle()
   if (lookupError) return { error: lookupError.message }
@@ -66,6 +77,7 @@ export async function saveEditorSurvey(
     status: SurveyStatus
     public_slug: string | null
     created_at: string
+    owner_id: string | null
   } | null
 
   if (current && current.status !== 'draft' && current.status !== 'closed') {
@@ -78,25 +90,38 @@ export async function saveEditorSurvey(
   }
 
   const description = survey.description || null
+  const meta = {
+    title: survey.title,
+    description,
+    course_id: survey.course_id || null,
+    semester_id: survey.semester_id || null,
+    lms_course_url: survey.lms_course_url || null,
+  }
+
   const writing = current
-    ? supabase
-        .from('surveys')
-        .update({ title: survey.title, description })
-        .eq('id', survey.id)
+    ? supabase.from('surveys').update(meta).eq('id', survey.id)
     : supabase.from('surveys').insert({
         id: survey.id,
-        title: survey.title,
-        description,
+        ...meta,
         status: 'draft',
+        owner_id: profile.instructor.id,
       })
 
   const { data, error } = await writing
     .select(
-      'id, title, description, status, public_slug, created_at, updated_at',
+      'id, title, description, status, public_slug, created_at, updated_at, owner_id, course_id, semester_id, lms_course_url',
     )
     .single()
   if (error || !data) {
     return { error: error?.message ?? 'The survey could not be saved.' }
+  }
+
+  if (!current) {
+    await supabase.from('survey_instructors').upsert({
+      survey_id: survey.id,
+      instructor_id: profile.instructor.id,
+      role: 'owner',
+    })
   }
 
   const synced = await syncQuestions(survey.id, survey.questions)
@@ -115,6 +140,10 @@ export async function saveEditorSurvey(
       public_slug: row.public_slug,
       created_at: row.created_at,
       updated_at: row.updated_at,
+      owner_id: row.owner_id,
+      course_id: row.course_id,
+      semester_id: row.semester_id,
+      lms_course_url: row.lms_course_url,
     },
   }
 }
@@ -205,6 +234,9 @@ async function syncQuestions(surveyId: string, questions: Question[]) {
       question_text: question.question_text,
       question_type: question.question_type,
       position: question.position,
+      min_value: question.min_value ?? null,
+      max_value: question.max_value ?? null,
+      rating_max: question.rating_max ?? null,
     }
     if (existing.has(question.id)) {
       const { error: updateError } = await supabase
@@ -271,11 +303,18 @@ function toSurvey(row: EditorRow): Survey {
     public_slug: row.public_slug,
     created_at: row.created_at,
     updated_at: row.updated_at,
+    owner_id: row.owner_id,
+    course_id: row.course_id,
+    semester_id: row.semester_id,
+    lms_course_url: row.lms_course_url,
     questions: questions.map((question) => ({
       id: question.id,
       question_text: question.question_text,
       question_type: question.question_type,
       position: question.position,
+      min_value: question.min_value,
+      max_value: question.max_value,
+      rating_max: question.rating_max,
       choices: [...(question.choices ?? [])]
         .sort((a, b) => a.position - b.position)
         .map((choice) => ({

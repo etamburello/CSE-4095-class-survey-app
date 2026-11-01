@@ -441,7 +441,7 @@ Because of this, the UI should strongly encourage Archive instead of Delete for 
 
 # 14. Future Schema Extensions
 
-Possible future tables:
+Phase 16 adds (see `supabase/migrations/20261101140000_phase16_enhancements.sql`):
 
 ```text
 courses
@@ -449,7 +449,6 @@ semesters
 question_bank
 instructors
 survey_instructors
-tags
 ```
 
-These are intentionally excluded from Version 1.
+Also: expanded `question_type` values, `answers.numeric_value`, survey `owner_id` / `course_id` / `semester_id` / `lms_course_url`, and Realtime on `responses`.
