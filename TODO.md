@@ -243,14 +243,16 @@ Verified against the live Supabase project and local app. Instructor login reach
 
 - [x] Push the project to GitHub.
 - [x] Create the Cloudflare Pages site.
-- [ ] Connect Cloudflare Pages to the GitHub repository.
-- [ ] Configure production environment variables.
+- [x] Connect Cloudflare Pages to the GitHub repository.
+- [x] Configure production environment variables.
 - [x] Deploy the application.
 - [x] Configure SPA routing.
-- [ ] Verify production login.
-- [ ] Verify QR codes point to the production URL.
-- [ ] Test student submissions in production.
-- [ ] Test instructor results in production.
+- [x] Verify production login.
+- [x] Verify QR codes point to the production URL.
+- [x] Test student submissions in production.
+- [x] Test instructor results in production.
+
+Verified on Cloudflare Pages at `https://cse-4095-class-survey-app.pages.dev`, connected to `etamburello/CSE-4095-class-survey-app` with build `npm run build` → `dist`, production `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`, and `public/_redirects` SPA fallback. Instructor login reaches the dashboard. Present shows a production `/s/:slug` QR link. A student submission records thank-you; results show 1 response at 100.0% / 0.0%. Supabase Auth Site URL and redirect allowlist include the pages.dev origin.
 
 ---
 
